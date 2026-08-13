@@ -50,25 +50,31 @@ export function createSimulation({ renderer, scene, params, count = 131072 }) {
     const dt = params.dt.mul(params.timeScale);
     const force = vec3(0.0).toVar();
 
-    // 1) CONSTANT / WIND FORCE
-    force.addAssign(params.wind.mul(params.windEnabled));
+    // 1) CAPA "Textura" (viento): una capa que empuja el campo en una
+    // dirección, como un pad o una capa sostenida entrando en la mezcla.
+    force.addAssign(params.wind.mul(params.windEnabled).mul(params.intensity));
 
-    // 2) RADIAL FORCE (positive = attraction, negative = repulsion)
+    // 2) CAPA "Núcleo" (radial, positivo = atracción, negativo = repulsión):
+    // el elemento que ancla el campo, como una raíz de bajo.
     const toAttractor = params.attractor.sub(p);
     const distance = max(toAttractor.length(), params.softening);
     const radialDirection = toAttractor.div(distance);
     const radialForce = radialDirection
       .mul(params.radialStrength)
       .div(distance.pow(2))
-      .mul(params.radialEnabled);
+      .mul(params.radialEnabled)
+      .mul(params.intensity);
     force.addAssign(radialForce);
 
-    // 3) VORTEX FORCE: tangent to the radial direction around Z.
+    // 3) CAPA "Pulso" (vórtice, tangente a la dirección radial en Z): el
+    // arpegio/motorik que hace girar el campo alrededor del núcleo.
     const zAxis = vec3(0.0, 0.0, 1.0);
     const tangent = zAxis.cross(radialDirection);
-    force.addAssign(tangent.mul(params.vortexStrength).mul(params.vortexEnabled));
+    force.addAssign(tangent.mul(params.vortexStrength).mul(params.vortexEnabled).mul(params.intensity));
 
-    // 4) LINEAR DRAG: F = -c v
+    // 4) CAPA "Fricción" (drag, F = -c v): ruido/distorsión que resta
+    // energía al sistema. No se escala por intensity - es un freno, no un
+    // empuje, y debe poder frenar el sistema incluso cuando intensity es alta.
     force.addAssign(v.mul(params.dragCoefficient).mul(params.dragEnabled).mul(-1.0));
 
     // INTEGRATION ---------------------------------------------------------

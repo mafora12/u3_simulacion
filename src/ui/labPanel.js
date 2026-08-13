@@ -67,8 +67,8 @@ export function createLabPanel({ params, onReset, onPreset, onModeChange, onPaus
   const panel = document.createElement('aside');
   panel.className = 'panel';
   panel.innerHTML = `
-    <h1>U3 · Forces Instrument</h1>
-    <p>LAB: aísla fuerzas, predice y prueba. <strong>P</strong> cambia a PERFORMANCE.</p>
+    <h1>LesAlpx · Instrumento de capas</h1>
+    <p>LAB: aísla cada capa, predice y prueba. <strong>P</strong> cambia a PERFORMANCE.</p>
   `;
 
   const sim = document.createElement('div');
@@ -80,6 +80,7 @@ export function createLabPanel({ params, onReset, onPreset, onModeChange, onPaus
     timeScale: params.timeScale.value,
     maxSpeed: params.maxSpeed.value,
     particleSize: params.particleSize.value,
+    intensity: params.intensity.value,
     radialStrength: params.radialStrength.value,
     vortexStrength: params.vortexStrength.value,
     dragCoefficient: params.dragCoefficient.value,
@@ -90,32 +91,34 @@ export function createLabPanel({ params, onReset, onPreset, onModeChange, onPaus
   refreshers.push(rangeRow(sim, 'timeScale', state, 'timeScale', 0, 2, 0.01, (v) => params.timeScale.value = v, () => params.timeScale.value));
   refreshers.push(rangeRow(sim, 'maxSpeed', state, 'maxSpeed', 0.2, 12, 0.1, (v) => params.maxSpeed.value = v, () => params.maxSpeed.value));
   refreshers.push(rangeRow(sim, 'particleSize', state, 'particleSize', 0.005, 0.1, 0.001, (v) => params.particleSize.value = v, () => params.particleSize.value));
+  refreshers.push(rangeRow(sim, 'intensity (macro)', state, 'intensity', 0, 2, 0.01, (v) => params.intensity.value = v, () => params.intensity.value));
 
-  const force = document.createElement('div');
-  force.className = 'group';
-  force.innerHTML = '<h2>Fuerzas</h2>';
-  panel.append(force);
+  const layers = document.createElement('div');
+  layers.className = 'group';
+  layers.innerHTML = '<h2>Capas</h2><p>Cada capa es algo que entra o sale de la mezcla, no un adorno visual.</p>';
+  panel.append(layers);
 
-  refreshers.push(checkRow(force, 'Radial', params.radialEnabled.value > 0, (v) => params.radialEnabled.value = v ? 1 : 0, () => params.radialEnabled.value > 0));
-  refreshers.push(rangeRow(force, 'radialStrength', state, 'radialStrength', -8, 8, 0.05, (v) => params.radialStrength.value = v, () => params.radialStrength.value));
-  refreshers.push(checkRow(force, 'Vórtice', params.vortexEnabled.value > 0, (v) => params.vortexEnabled.value = v ? 1 : 0, () => params.vortexEnabled.value > 0));
-  refreshers.push(rangeRow(force, 'vortexStrength', state, 'vortexStrength', -8, 8, 0.05, (v) => params.vortexStrength.value = v, () => params.vortexStrength.value));
-  refreshers.push(checkRow(force, 'Drag', params.dragEnabled.value > 0, (v) => params.dragEnabled.value = v ? 1 : 0, () => params.dragEnabled.value > 0));
-  refreshers.push(rangeRow(force, 'dragCoefficient', state, 'dragCoefficient', 0, 1, 0.01, (v) => params.dragCoefficient.value = v, () => params.dragCoefficient.value));
-  refreshers.push(checkRow(force, 'Viento', params.windEnabled.value > 0, (v) => params.windEnabled.value = v ? 1 : 0, () => params.windEnabled.value > 0));
-  refreshers.push(rangeRow(force, 'wind.x', state, 'windX', -4, 4, 0.05, (v) => params.wind.value.x = v, () => params.wind.value.x));
-  refreshers.push(rangeRow(force, 'wind.y', state, 'windY', -4, 4, 0.05, (v) => params.wind.value.y = v, () => params.wind.value.y));
+  refreshers.push(checkRow(layers, '1 · Pulso (vórtice)', params.vortexEnabled.value > 0, (v) => params.vortexEnabled.value = v ? 1 : 0, () => params.vortexEnabled.value > 0));
+  refreshers.push(rangeRow(layers, 'vortexStrength', state, 'vortexStrength', -8, 8, 0.05, (v) => params.vortexStrength.value = v, () => params.vortexStrength.value));
+  refreshers.push(checkRow(layers, '2 · Núcleo (radial)', params.radialEnabled.value > 0, (v) => params.radialEnabled.value = v ? 1 : 0, () => params.radialEnabled.value > 0));
+  refreshers.push(rangeRow(layers, 'radialStrength', state, 'radialStrength', -8, 8, 0.05, (v) => params.radialStrength.value = v, () => params.radialStrength.value));
+  refreshers.push(checkRow(layers, '3 · Textura (viento)', params.windEnabled.value > 0, (v) => params.windEnabled.value = v ? 1 : 0, () => params.windEnabled.value > 0));
+  refreshers.push(rangeRow(layers, 'wind.x', state, 'windX', -4, 4, 0.05, (v) => params.wind.value.x = v, () => params.wind.value.x));
+  refreshers.push(rangeRow(layers, 'wind.y', state, 'windY', -4, 4, 0.05, (v) => params.wind.value.y = v, () => params.wind.value.y));
+  refreshers.push(checkRow(layers, '4 · Fricción (drag)', params.dragEnabled.value > 0, (v) => params.dragEnabled.value = v ? 1 : 0, () => params.dragEnabled.value > 0));
+  refreshers.push(rangeRow(layers, 'dragCoefficient', state, 'dragCoefficient', 0, 1, 0.01, (v) => params.dragCoefficient.value = v, () => params.dragCoefficient.value));
 
   const tests = document.createElement('div');
   tests.className = 'group';
-  tests.innerHTML = '<h2>Pruebas de comportamiento</h2><p>Antes de pulsar una prueba, predice qué debería ocurrir.</p>';
+  tests.innerHTML = '<h2>Pruebas de capa (verificación)</h2><p>Antes de pulsar una prueba, predice qué debería ocurrir.</p>';
   panel.append(tests);
   for (const [id, label] of [
-    ['inertia', '1 · Inercia'],
-    ['wind', '2 · Fuerza constante +X'],
-    ['attract', '3 · Atracción'],
-    ['repel', '4 · Repulsión'],
-    ['vortex', '5 · Vórtice']
+    ['inercia', '0 · Inercia (sin capas)'],
+    ['pulso', '1 · Pulso solo'],
+    ['nucleo', '2 · Núcleo solo'],
+    ['textura', '3 · Textura sola'],
+    ['friccion', '4 · Fricción sola'],
+    ['todas', '5 · Todas juntas']
   ]) button(tests, label, () => onPreset(id));
 
   const actions = document.createElement('div');

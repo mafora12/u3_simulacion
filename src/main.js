@@ -6,6 +6,7 @@ import './styles.css';
 import { createParameters } from './simulation/parameters.js';
 import { createSimulation } from './simulation/createSimulation.js';
 import { createLabPanel } from './ui/labPanel.js';
+import { createOscilloscope } from './ui/oscilloscope.js';
 
 const PARTICLE_COUNT = 131072; // 2^17. Increase only after measuring performance.
 
@@ -47,7 +48,7 @@ async function main() {
   scene.add(axes);
 
   // POINTER -> WORLD POSITION --------------------------------------------
-  // This is a useful camera concept: screen coordinates are not world coords.
+  // El puntero conduce dónde se ancla la capa Núcleo, en vivo.
   const pointerNdc = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
   const interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
@@ -68,6 +69,17 @@ async function main() {
   let panel;
   let savedRadialStrength = params.radialStrength.value;
 
+  // Identidad de capa: mismo número en LAB (prueba aislada, con reset) y en
+  // PERFORMANCE (encendido/apagado en vivo, sin reset) para la misma capa.
+  const LAYER_KEYS = {
+    Digit1: { id: 'pulso', enabled: 'vortexEnabled' },
+    Digit2: { id: 'nucleo', enabled: 'radialEnabled' },
+    Digit3: { id: 'textura', enabled: 'windEnabled' },
+    Digit4: { id: 'friccion', enabled: 'dragEnabled' }
+  };
+
+  // Pruebas de LAB: aíslan una capa y resetean, para poder predecir y
+  // verificar su efecto por separado antes de tocarla en vivo.
   const applyPreset = (id) => {
     params.windEnabled.value = 0;
     params.radialEnabled.value = 0;
@@ -75,27 +87,49 @@ async function main() {
     params.dragEnabled.value = 0;
     params.wind.value.set(0, 0, 0);
     params.initialSpeed.value = 0;
+    params.intensity.value = 1;
 
-    if (id === 'inertia') {
+    if (id === 'inercia') {
       params.initialSpeed.value = 0.8;
-    } else if (id === 'wind') {
-      params.windEnabled.value = 1;
-      params.wind.value.set(1.5, 0, 0);
-    } else if (id === 'attract') {
+    } else if (id === 'pulso') {
+      params.vortexEnabled.value = 1;
+      params.vortexStrength.value = 2.5;
+    } else if (id === 'nucleo') {
       params.radialEnabled.value = 1;
       params.radialStrength.value = 3.0;
-    } else if (id === 'repel') {
-      params.radialEnabled.value = 1;
-      params.radialStrength.value = -3.0;
-    } else if (id === 'vortex') {
-      params.radialEnabled.value = 1;
-      params.radialStrength.value = 1.0;
-      params.vortexEnabled.value = 1;
-      params.vortexStrength.value = 3.0;
+    } else if (id === 'textura') {
+      params.windEnabled.value = 1;
+      params.wind.value.set(1.5, 0, 0);
+    } else if (id === 'friccion') {
       params.dragEnabled.value = 1;
-      params.dragCoefficient.value = 0.08;
+      params.dragCoefficient.value = 0.5;
+      params.initialSpeed.value = 1.0;
+    } else if (id === 'todas') {
+      params.vortexEnabled.value = 1;
+      params.vortexStrength.value = 1.4;
+      params.radialEnabled.value = 1;
+      params.radialStrength.value = 2.0;
+      params.windEnabled.value = 1;
+      params.wind.value.set(0.8, 0, 0);
+      params.dragEnabled.value = 1;
+      params.dragCoefficient.value = 0.12;
     }
     simulation.reset();
+    panel?.refresh();
+  };
+
+  // PERFORMANCE: entra/sale una capa de la mezcla sin resetear el sistema -
+  // el comportamiento debe seguir emergiendo de las condiciones actuales,
+  // no de un corte a un estado inicial.
+  const toggleLayer = (enabledKey) => {
+    params[enabledKey].value = params[enabledKey].value > 0 ? 0 : 1;
+    panel?.refresh();
+  };
+
+  const toggleAllLayers = () => {
+    const keys = Object.values(LAYER_KEYS).map((l) => l.enabled);
+    const allOn = keys.every((k) => params[k].value > 0);
+    for (const k of keys) params[k].value = allOn ? 0 : 1;
     panel?.refresh();
   };
 
@@ -107,8 +141,8 @@ async function main() {
     attractorHelper.visible = lab;
     orbit.enabled = lab;
     hud.innerHTML = lab
-      ? '<strong>LAB</strong> · P: performance · R: reset · 1–5: pruebas'
-      : '<strong>PERFORMANCE</strong> · P: lab · espacio: invertir radial · puntero: atractor';
+      ? '<strong>LAB</strong> · P: performance · R: reset · 0–5: pruebas de capa'
+      : '<strong>PERFORMANCE</strong> · P: lab · 1–4: capas dentro/fuera · 5: todas · espacio: invertir núcleo · rueda: intensidad · puntero: posición del núcleo';
   };
 
   panel = createLabPanel({
@@ -124,17 +158,54 @@ async function main() {
   document.body.append(hud);
   setMode('LAB');
 
-  // BASELINE LIVE INSTRUMENT MAPPING -------------------------------------
-  // Students are expected to redesign this mapping for their own instrument.
+  // OSCILOSCOPIO -----------------------------------------------------------
+  // Grafica la velocidad promedio real de las partículas, leída de vuelta
+  // desde el compute shader. No lee audio - es un indicador del propio
+  // sistema, útil tanto para verificar en LAB como para tocar con feedback.
+  const scope = createOscilloscope();
+  let samplingVelocity = false;
+
+  async function sampleAverageSpeed() {
+    if (samplingVelocity) return;
+    samplingVelocity = true;
+    try {
+      const raw = await renderer.getArrayBufferAsync(simulation.velocityBuffer.value);
+      const floats = new Float32Array(raw);
+      const n = floats.length / 3;
+      let sum = 0;
+      for (let i = 0; i < n; i++) {
+        const vx = floats[i * 3];
+        const vy = floats[i * 3 + 1];
+        const vz = floats[i * 3 + 2];
+        sum += Math.sqrt(vx * vx + vy * vy + vz * vz);
+      }
+      scope.push(sum / n);
+    } finally {
+      samplingVelocity = false;
+    }
+  }
+  setInterval(sampleAverageSpeed, 150);
+
+  // LIVE INSTRUMENT MAPPING FOR LesAlpx ------------------------------------
+  // Pocos controles con significado: en LAB, los números aíslan y resetean
+  // una capa para verificarla; en PERFORMANCE, los mismos números la meten
+  // o sacan de la mezcla en vivo, sin resetear el sistema.
   addEventListener('keydown', (event) => {
     if (event.repeat) return;
     if (event.code === 'KeyP') setMode(mode === 'LAB' ? 'PERFORMANCE' : 'LAB');
     if (event.code === 'KeyR') simulation.reset();
-    if (event.code === 'Digit1') applyPreset('inertia');
-    if (event.code === 'Digit2') applyPreset('wind');
-    if (event.code === 'Digit3') applyPreset('attract');
-    if (event.code === 'Digit4') applyPreset('repel');
-    if (event.code === 'Digit5') applyPreset('vortex');
+    if (event.code === 'Digit0' && mode === 'LAB') applyPreset('inercia');
+
+    const layer = LAYER_KEYS[event.code];
+    if (layer) {
+      if (mode === 'LAB') applyPreset(layer.id);
+      else toggleLayer(layer.enabled);
+    }
+
+    if (event.code === 'Digit5') {
+      if (mode === 'LAB') applyPreset('todas');
+      else toggleAllLayers();
+    }
 
     if (event.code === 'Space') {
       event.preventDefault();
@@ -147,6 +218,13 @@ async function main() {
   addEventListener('keyup', (event) => {
     if (event.code === 'Space') params.radialStrength.value = savedRadialStrength;
   });
+
+  // Rueda: macro de intensidad en vivo, cuánto empujan las capas activas.
+  addEventListener('wheel', (event) => {
+    const next = params.intensity.value - Math.sign(event.deltaY) * 0.05;
+    params.intensity.value = Math.min(2, Math.max(0, next));
+    panel?.refresh();
+  }, { passive: true });
 
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
@@ -161,6 +239,7 @@ async function main() {
     if (!paused) simulation.stepSimulation();
     orbit.update();
     renderer.render(scene, camera);
+    scope.draw(params.maxSpeed.value);
   });
 }
 
