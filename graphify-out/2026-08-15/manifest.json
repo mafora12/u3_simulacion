@@ -1,0 +1,74 @@
+{
+  "package.json": {
+    "mtime": 1786833945.0910647,
+    "seen": 1786834514.20542,
+    "ast_hash": "1b95c7c473147e26e559a711e2d9cbd5",
+    "semantic_hash": "1b95c7c473147e26e559a711e2d9cbd5"
+  },
+  "src/main.js": {
+    "mtime": 1786833945.0913792,
+    "seen": 1786834514.2054222,
+    "ast_hash": "1607f403fbaf308c1479da5ec4cd8d8e",
+    "semantic_hash": "1607f403fbaf308c1479da5ec4cd8d8e"
+  },
+  "src/simulation/createSimulation.js": {
+    "mtime": 1786833945.0916169,
+    "seen": 1786834514.205423,
+    "ast_hash": "b0adf2c79969aa75bf07b29ca8a365b3",
+    "semantic_hash": "b0adf2c79969aa75bf07b29ca8a365b3"
+  },
+  "src/simulation/parameters.js": {
+    "mtime": 1786833945.0917454,
+    "seen": 1786834514.205423,
+    "ast_hash": "5a7b949c51c42616034b200b56659d03",
+    "semantic_hash": "5a7b949c51c42616034b200b56659d03"
+  },
+  "src/ui/labPanel.js": {
+    "mtime": 1786833945.0923188,
+    "seen": 1786834514.205424,
+    "ast_hash": "8369e8a6e05dca6b3b0fa8f94ab37c2f",
+    "semantic_hash": "8369e8a6e05dca6b3b0fa8f94ab37c2f"
+  },
+  "src/ui/oscilloscope.js": {
+    "mtime": 1786833945.0924587,
+    "seen": 1786834514.205424,
+    "ast_hash": "61a987e6efa9578b75a57da7e319368b",
+    "semantic_hash": "61a987e6efa9578b75a57da7e319368b"
+  },
+  "vite.config.js": {
+    "mtime": 1786833945.0925958,
+    "seen": 1786834514.2054248,
+    "ast_hash": "625f9a604c2f0abae38d7a4b00d32b11",
+    "semantic_hash": "625f9a604c2f0abae38d7a4b00d32b11"
+  },
+  ".github/workflows/deploy.yml": {
+    "mtime": 1786833945.090219,
+    "seen": 1786834514.2054248,
+    "ast_hash": "38b5dea37c286fdc28e4354dee219928",
+    "semantic_hash": "38b5dea37c286fdc28e4354dee219928"
+  },
+  "GUIA_ESTUDIANTE.md": {
+    "mtime": 1786833945.0904636,
+    "seen": 1786834514.205426,
+    "ast_hash": "6e23cd5c8c5c66cca1e5fbb6fe44dbe7",
+    "semantic_hash": "6e23cd5c8c5c66cca1e5fbb6fe44dbe7"
+  },
+  "PRUEBAS_Y_DEPURACION.md": {
+    "mtime": 1786833945.0905764,
+    "seen": 1786834514.205426,
+    "ast_hash": "d3c3387518d039380ab21317c26504d5",
+    "semantic_hash": "d3c3387518d039380ab21317c26504d5"
+  },
+  "README.md": {
+    "mtime": 1786833945.090676,
+    "seen": 1786834514.205427,
+    "ast_hash": "2579d06039983463b4b11db0adb09564",
+    "semantic_hash": "2579d06039983463b4b11db0adb09564"
+  },
+  "index.html": {
+    "mtime": 1786833945.0907838,
+    "seen": 1786834514.205427,
+    "ast_hash": "2154a8e94192861d59d696e18c7a5c25",
+    "semantic_hash": "2154a8e94192861d59d696e18c7a5c25"
+  }
+}
