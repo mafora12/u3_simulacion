@@ -51,12 +51,33 @@ npm run preview
 
 `preview` sirve el contenido construido en `dist/`; úsalo antes de publicar.
 
+## Cómo se toca
+
+El instrumento arranca vacío: **cero partículas y ninguna fuerza activa**. El flujo es
+dibujar primero y conducir fuerzas después.
+
+1. Pulsa `D` y traza una figura con el puntero. Esa figura es la **condición inicial**:
+   define dónde nacen las partículas, no por dónde tienen que pasar. Nacen quietas.
+2. Vuelve a pulsar `D` para salir del modo dibujo. Ahí recuperas la órbita de cámara.
+3. Activa capas de fuerza con `1`–`4` y observa qué le ocurre a tu figura.
+
+Dibujar **no** coreografía el movimiento: no se tocan posiciones a mano en ningún
+momento. El trazo sólo siembra el estado inicial y todo lo que pasa después emerge de
+las fuerzas del compute shader.
+
 ## Controles
 
+- `D`: entra/sale del modo dibujo. Mientras dibujas, la órbita de cámara queda
+  bloqueada, para que arrastrar el puntero trace en lugar de girar la vista.
 - `P`: LAB / PERFORMANCE.
-- `R`: reset.
-- `1..5`: escenarios de exploración.
-- puntero: mueve el atractor sobre el plano Z=0.
+- `R`: reset al estado inicial: cero partículas, ninguna fuerza y figura olvidada.
+- `0`: devuelve la figura a su estado dibujado, sin borrarla.
+- `1`–`4`: las cuatro capas de fuerza (Pulso, Núcleo, Textura, Fricción). En LAB
+  aíslan una capa y restauran la figura para poder verificarla; en PERFORMANCE la
+  meten o sacan de la mezcla en vivo, sin cortar el sistema.
+- `5`: todas las capas.
+- puntero (fuera del modo dibujo): mueve el atractor de la capa Núcleo.
+- rueda: macro de intensidad.
 - espacio (PERFORMANCE): invierte temporalmente el signo de la fuerza radial.
 
 ## Publicar en GitHub Pages

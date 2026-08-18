@@ -1,80 +1,74 @@
 {
   "package.json": {
-    "mtime": 1786833945.0910647,
-    "seen": 1786838311.770776,
-    "ast_hash": "1b95c7c473147e26e559a711e2d9cbd5",
-    "semantic_hash": "1b95c7c473147e26e559a711e2d9cbd5"
+    "mtime": 1787025976.3586068,
+    "seen": 1787027660.9791684,
+    "ast_hash": "f96eb59c8b56139958a13af910f8a790",
+    "semantic_hash": "f96eb59c8b56139958a13af910f8a790"
   },
   "src/main.js": {
-    "mtime": 1786833945.0913792,
-    "seen": 1786838311.7707782,
-    "ast_hash": "1607f403fbaf308c1479da5ec4cd8d8e",
-    "semantic_hash": "1607f403fbaf308c1479da5ec4cd8d8e"
+    "mtime": 1787025976.3586068,
+    "seen": 1787027660.979171,
+    "ast_hash": "e3138bab5f8947f8653b1be57c9a055b",
+    "semantic_hash": "e3138bab5f8947f8653b1be57c9a055b"
   },
   "src/simulation/createSimulation.js": {
-    "mtime": 1786833945.0916169,
-    "seen": 1786838311.7707782,
-    "ast_hash": "b0adf2c79969aa75bf07b29ca8a365b3",
-    "semantic_hash": "b0adf2c79969aa75bf07b29ca8a365b3"
+    "mtime": 1787025976.3596094,
+    "seen": 1787027660.9791727,
+    "ast_hash": "12a41af3370134b762711efd7057fab2",
+    "semantic_hash": "12a41af3370134b762711efd7057fab2"
   },
   "src/simulation/parameters.js": {
-    "mtime": 1786833945.0917454,
-    "seen": 1786838311.770779,
-    "ast_hash": "5a7b949c51c42616034b200b56659d03",
-    "semantic_hash": "5a7b949c51c42616034b200b56659d03"
+    "mtime": 1787025976.3596094,
+    "seen": 1787027660.9791734,
+    "ast_hash": "0573f1f43cf0256b6dfa6e5cc4616eb5",
+    "semantic_hash": "0573f1f43cf0256b6dfa6e5cc4616eb5"
   },
   "src/ui/labPanel.js": {
-    "mtime": 1786833945.0923188,
-    "seen": 1786838311.770779,
-    "ast_hash": "8369e8a6e05dca6b3b0fa8f94ab37c2f",
-    "semantic_hash": "8369e8a6e05dca6b3b0fa8f94ab37c2f"
+    "mtime": 1787025976.3606243,
+    "seen": 1787027660.9791741,
+    "ast_hash": "4c1b55ff4868b0d6732d3860b5b252ae",
+    "semantic_hash": "4c1b55ff4868b0d6732d3860b5b252ae"
   },
   "src/ui/oscilloscope.js": {
-    "mtime": 1786833945.0924587,
-    "seen": 1786838311.7707798,
-    "ast_hash": "61a987e6efa9578b75a57da7e319368b",
-    "semantic_hash": "61a987e6efa9578b75a57da7e319368b"
+    "mtime": 1787025976.3606243,
+    "seen": 1787027660.9791749,
+    "ast_hash": "fcb30b376405a96d4e15b167e89aa00e",
+    "semantic_hash": "fcb30b376405a96d4e15b167e89aa00e"
   },
   "vite.config.js": {
-    "mtime": 1786833945.0925958,
-    "seen": 1786838311.7707798,
-    "ast_hash": "625f9a604c2f0abae38d7a4b00d32b11",
-    "semantic_hash": "625f9a604c2f0abae38d7a4b00d32b11"
+    "mtime": 1787025976.3606243,
+    "seen": 1787027660.9791753,
+    "ast_hash": "327fde34290baa1c4210c8bfa76d5140",
+    "semantic_hash": "327fde34290baa1c4210c8bfa76d5140"
   },
   ".github/workflows/deploy.yml": {
-    "mtime": 1786833945.090219,
-    "seen": 1786838311.770781,
-    "ast_hash": "38b5dea37c286fdc28e4354dee219928",
-    "semantic_hash": "38b5dea37c286fdc28e4354dee219928"
+    "mtime": 1787025976.3344753,
+    "seen": 1787027660.9791765,
+    "ast_hash": "d73c6fc150437687ecbd5eba25fd1f05",
+    "semantic_hash": "d73c6fc150437687ecbd5eba25fd1f05"
   },
   "GUIA_ESTUDIANTE.md": {
-    "mtime": 1786837726.8572562,
-    "seen": 1786838311.770781,
-    "ast_hash": "fb3d3bccee0467d97f92e24004c152b4",
-    "semantic_hash": "fb3d3bccee0467d97f92e24004c152b4"
+    "mtime": 1787025976.3354805,
+    "seen": 1787027660.9791772,
+    "ast_hash": "73924710d88838fdac5097ed9965a93f",
+    "semantic_hash": "73924710d88838fdac5097ed9965a93f"
   },
   "PRUEBAS_Y_DEPURACION.md": {
-    "mtime": 1786837737.371559,
-    "seen": 1786838311.770782,
-    "ast_hash": "d490c6f5d295a9896aff5cf5df2655c7",
-    "semantic_hash": "d490c6f5d295a9896aff5cf5df2655c7"
+    "mtime": 1787025976.3354805,
+    "seen": 1787027660.9791777,
+    "ast_hash": "4eedea12e1f5356a31880c15e048367e",
+    "semantic_hash": "4eedea12e1f5356a31880c15e048367e"
   },
   "README.md": {
-    "mtime": 1786837718.4985683,
-    "seen": 1786838311.770782,
-    "ast_hash": "362409d5af72c23d066bfce4def725ff",
-    "semantic_hash": "362409d5af72c23d066bfce4def725ff"
+    "mtime": 1787025976.3364847,
+    "seen": 1787027660.9791784,
+    "ast_hash": "8aaccb11ebd9688ce5bbbc18d383bea0",
+    "semantic_hash": "8aaccb11ebd9688ce5bbbc18d383bea0"
   },
   "index.html": {
-    "mtime": 1786833945.0907838,
-    "seen": 1786838311.770782,
-    "ast_hash": "2154a8e94192861d59d696e18c7a5c25",
-    "semantic_hash": "2154a8e94192861d59d696e18c7a5c25"
-  },
-  "PARTITURA_LESALPX.md": {
-    "mtime": 1786837709.801368,
-    "seen": 1786838311.770781,
-    "ast_hash": "c61aebb795ffeda24c98c368aef60930",
-    "semantic_hash": "c61aebb795ffeda24c98c368aef60930"
+    "mtime": 1787025976.357604,
+    "seen": 1787027660.979179,
+    "ast_hash": "89720a08604a40f59fa6e6a9963329dd",
+    "semantic_hash": "89720a08604a40f59fa6e6a9963329dd"
   }
 }

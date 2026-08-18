@@ -62,21 +62,36 @@ function button(parent, label, onClick) {
   return b;
 }
 
-export function createLabPanel({ params, onReset, onPreset, onModeChange, onPauseChange }) {
+export function createLabPanel({
+  params,
+  onReset,
+  onRestore,
+  onSeedCloud,
+  onDrawToggle,
+  onPreset,
+  onModeChange,
+  onPauseChange
+}) {
   const refreshers = [];
   const panel = document.createElement('aside');
   panel.className = 'panel';
   panel.innerHTML = `
     <h1>LesAlpx · Instrumento de capas</h1>
-    <p>LAB: aísla cada capa, predice y prueba. <strong>P</strong> cambia a PERFORMANCE.</p>
+    <p>Dibuja la figura (condición inicial), luego conduce las fuerzas.
+    <strong>P</strong> cambia a PERFORMANCE.</p>
   `;
 
-  const sim = document.createElement('div');
-  sim.className = 'group';
-  sim.innerHTML = '<h2>Simulación</h2>';
-  panel.append(sim);
+  // FIGURA -----------------------------------------------------------------
+  // La figura dibujada es la condición inicial, no una trayectoria: define
+  // dónde nacen las partículas, no por dónde tienen que pasar.
+  const figure = document.createElement('div');
+  figure.className = 'group';
+  figure.innerHTML = '<h2>Figura (condición inicial)</h2><p>El trazo decide dónde nacen las partículas. Nacen quietas: nada se mueve hasta que activas una capa.</p>';
+  panel.append(figure);
 
   const state = {
+    brushRadius: params.brushRadius.value,
+    initialSpeed: params.initialSpeed.value,
     timeScale: params.timeScale.value,
     maxSpeed: params.maxSpeed.value,
     particleSize: params.particleSize.value,
@@ -87,6 +102,17 @@ export function createLabPanel({ params, onReset, onPreset, onModeChange, onPaus
     windX: params.wind.value.x,
     windY: params.wind.value.y
   };
+
+  const drawButton = button(figure, 'Modo dibujo: OFF · D', () => onDrawToggle?.());
+  refreshers.push(rangeRow(figure, 'brushRadius (grosor)', state, 'brushRadius', 0.01, 0.4, 0.005, (v) => params.brushRadius.value = v, () => params.brushRadius.value));
+  refreshers.push(rangeRow(figure, 'initialSpeed (al nacer)', state, 'initialSpeed', 0, 2, 0.01, (v) => params.initialSpeed.value = v, () => params.initialSpeed.value));
+  button(figure, 'Restaurar figura · 0', () => onRestore?.());
+  button(figure, 'Sembrar nube de prueba', () => onSeedCloud?.());
+
+  const sim = document.createElement('div');
+  sim.className = 'group';
+  sim.innerHTML = '<h2>Simulación</h2>';
+  panel.append(sim);
 
   refreshers.push(rangeRow(sim, 'timeScale', state, 'timeScale', 0, 2, 0.01, (v) => params.timeScale.value = v, () => params.timeScale.value));
   refreshers.push(rangeRow(sim, 'maxSpeed', state, 'maxSpeed', 0.2, 12, 0.1, (v) => params.maxSpeed.value = v, () => params.maxSpeed.value));
@@ -110,7 +136,7 @@ export function createLabPanel({ params, onReset, onPreset, onModeChange, onPaus
 
   const tests = document.createElement('div');
   tests.className = 'group';
-  tests.innerHTML = '<h2>Pruebas de capa (verificación)</h2><p>Antes de pulsar una prueba, predice qué debería ocurrir.</p>';
+  tests.innerHTML = '<h2>Pruebas de capa (verificación)</h2><p>Cada prueba aísla una capa y devuelve la figura a su estado dibujado. Predice qué debería ocurrir antes de pulsar.</p>';
   panel.append(tests);
   for (const [id, label] of [
     ['inercia', '0 · Inercia (sin capas)'],
@@ -125,7 +151,7 @@ export function createLabPanel({ params, onReset, onPreset, onModeChange, onPaus
   actions.className = 'group';
   actions.innerHTML = '<h2>Acciones</h2>';
   panel.append(actions);
-  button(actions, 'Reset', onReset);
+  button(actions, 'Reset: cero partículas · R', onReset);
   button(actions, 'Pausar / continuar', () => onPauseChange());
   button(actions, 'LAB / PERFORMANCE', () => onModeChange());
 
@@ -134,6 +160,10 @@ export function createLabPanel({ params, onReset, onPreset, onModeChange, onPaus
   return {
     element: panel,
     setVisible(visible) { panel.classList.toggle('hidden', !visible); },
+    setDrawMode(active) {
+      drawButton.textContent = active ? 'Modo dibujo: ON · D' : 'Modo dibujo: OFF · D';
+      drawButton.classList.toggle('active', active);
+    },
     refresh() { for (const item of refreshers) item.refresh(); }
   };
 }

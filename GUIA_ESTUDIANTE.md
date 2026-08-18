@@ -15,6 +15,8 @@ No se espera que memorices Three.js, TSL o WebGPU. Sí debes poder:
 ## Modelo mental
 
 ```text
+FIGURA DIBUJADA (condición inicial)
+        ↓
 CONTROLES DEL INTÉRPRETE
         ↓
 PARÁMETROS / UNIFORMS
@@ -28,6 +30,25 @@ RENDER
 material + instancias + cámara → pantalla
 ```
 
+### La figura es condición inicial, no trayectoria
+
+El dibujo entra por arriba del modelo, una sola vez: decide **dónde nacen** las
+partículas y con qué velocidad (`initialSpeed`, cero por defecto). No vuelve a tocar
+posiciones nunca más. Todo lo que la figura hace después —organizarse, tensarse,
+dispersarse, colapsar— sale del bloque de fuerzas del compute shader.
+
+Esa frontera es lo que distingue un instrumento de una animación, y se puede verificar:
+con las cuatro capas apagadas, la figura debe quedarse absolutamente inmóvil.
+
+### Cero partículas al arrancar
+
+El buffer en GPU tiene tamaño fijo (2^17 slots), así que «cero partículas» no significa
+un buffer vacío sino que ningún slot está ocupado. Un tercer buffer, `aliveBuffer`,
+marca con 1 o 0 qué slots existen: el compute los salta y el render los dibuja con
+escala 0. Al dibujar, cada tramo del trazo ocupa un bloque de 256 slots consecutivos, en
+anillo. Por eso `R` (cero partículas) y `0` (restaurar la figura) son operaciones
+baratas: sólo reescriben ese estado.
+
 ### CPU y GPU
 
 JavaScript organiza la aplicación y modifica parámetros. La actualización masiva de partículas ocurre en GPU. El compute pass ejecuta conceptualmente la misma regla para muchas partículas en paralelo.
@@ -38,8 +59,14 @@ TSL es la capa de Three.js con la que expresamos operaciones que Three.js convie
 
 ## Cinco exploraciones antes de diseñar
 
-En modo LAB usa `1..5` y registra la predicción y la observación:
+Dibuja primero una figura con `D` —un círculo funciona bien porque su simetría hace
+evidente cualquier asimetría de la fuerza— y déjala fija como condición inicial. En modo
+LAB, `1..5` aíslan una capa y devuelven la figura a su estado dibujado, así que las cinco
+exploraciones parten del mismo punto y son comparables entre sí. Registra la predicción
+y la observación:
 
+0. **Reposo:** sin ninguna capa activa, la figura no se mueve en absoluto. Si se mueve,
+   hay algo empujando posiciones fuera del modelo de fuerzas.
 1. **Inercia:** sin fuerzas, una partícula que ya se mueve conserva aproximadamente su movimiento.
 2. **Fuerza constante +X:** partiendo con velocidad cero, la velocidad X debe crecer y las partículas deben desplazarse hacia +X.
 3. **Atracción:** la aceleración debe apuntar hacia el atractor.
@@ -68,7 +95,8 @@ Un buen prompt incluye: archivo a modificar, ecuación o comportamiento deseado,
 
 Debes poder señalar en el proyecto:
 
-- **estado:** `positionBuffer`, `velocityBuffer`;
+- **estado:** `positionBuffer`, `velocityBuffer`, `aliveBuffer`;
+- **condición inicial:** `spawnSegment` de `createSimulation.js` (el pincel);
 - **fuerzas:** bloque `force` de `createSimulation.js`;
 - **integración:** actualización de `v` y `p`;
 - **render:** `SpriteNodeMaterial` + `InstancedMesh`;

@@ -41,6 +41,11 @@ canvas { display: block; width: 100%; height: 100%; }
   color: inherit;
 }
 .panel button:hover { background: rgba(255,255,255,.14); }
+.panel button.active {
+  background: rgba(70, 166, 255, .22);
+  border-color: rgba(70, 166, 255, .55);
+  color: #cfe6ff;
+}
 .panel .value { font-variant-numeric: tabular-nums; opacity: .85; }
 .panel .group { padding-top: 4px; border-top: 1px solid rgba(255,255,255,.08); }
 .panel.hidden { display: none; }

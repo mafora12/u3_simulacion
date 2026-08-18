@@ -9,6 +9,9 @@ import { createLabPanel } from './ui/labPanel.js';
 import { createOscilloscope } from './ui/oscilloscope.js';
 
 const PARTICLE_COUNT = 131072; // 2^17. Increase only after measuring performance.
+const STAMP_SIZE = 256;        // partículas por tramo del pincel
+const MIN_SEGMENT = 0.015;     // no sellar si el puntero apenas se movió
+const MAX_SEGMENT = 0.5;       // tramo máximo, para no perder densidad al trazar rápido
 
 async function main() {
   const mount = document.querySelector('#app');
@@ -30,13 +33,20 @@ async function main() {
   renderer.setSize(innerWidth, innerHeight);
   mount.appendChild(renderer.domElement);
   await renderer.init();
+  const canvas = renderer.domElement;
 
-  const orbit = new OrbitControls(camera, renderer.domElement);
+  const orbit = new OrbitControls(camera, canvas);
   orbit.enableDamping = true;
   orbit.target.set(0, 0, 0);
 
   const params = createParameters();
-  const simulation = createSimulation({ renderer, scene, params, count: PARTICLE_COUNT });
+  const simulation = createSimulation({
+    renderer,
+    scene,
+    params,
+    count: PARTICLE_COUNT,
+    stampSize: STAMP_SIZE
+  });
 
   // LAB HELPERS -----------------------------------------------------------
   const attractorHelper = new THREE.Mesh(
@@ -47,30 +57,135 @@ async function main() {
   const axes = new THREE.AxesHelper(1.5);
   scene.add(axes);
 
-  // POINTER -> WORLD POSITION --------------------------------------------
-  // El puntero conduce dónde se ancla la capa Núcleo, en vivo.
+  const hud = document.createElement('div');
+  hud.className = 'hud';
+  document.body.append(hud);
+
+  // PUNTERO -> POSICIÓN EN EL MUNDO ---------------------------------------
+  // El plano de trabajo siempre mira a la cámara: lo que trazas en pantalla
+  // aparece tal cual, aunque hayas orbitado la vista antes de dibujar.
   const pointerNdc = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
-  const interactionPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  const workPlane = new THREE.Plane();
+  const planeNormal = new THREE.Vector3();
+  const ORIGIN = new THREE.Vector3(0, 0, 0);
   const hit = new THREE.Vector3();
 
-  addEventListener('pointermove', (event) => {
+  function pointerToWorld(event, out) {
     pointerNdc.x = (event.clientX / innerWidth) * 2 - 1;
     pointerNdc.y = -(event.clientY / innerHeight) * 2 + 1;
+    camera.getWorldDirection(planeNormal);
+    workPlane.setFromNormalAndCoplanarPoint(planeNormal, ORIGIN);
     raycaster.setFromCamera(pointerNdc, camera);
-    if (raycaster.ray.intersectPlane(interactionPlane, hit)) {
+    return raycaster.ray.intersectPlane(workPlane, out) ? out : null;
+  }
+
+  let paused = false;
+  let mode = 'LAB';
+  let drawMode = false;
+  let drawing = false;
+  let panel;
+  let savedRadialStrength = params.radialStrength.value;
+
+  const lastStamp = new THREE.Vector3();
+  const segmentStart = new THREE.Vector3();
+  const segmentEnd = new THREE.Vector3();
+  let hasLastStamp = false;
+
+  function updateHud() {
+    const draw = drawMode
+      ? '<strong>DIBUJO</strong>: arrastra para trazar · D: salir'
+      : 'D: dibujar figura';
+    hud.innerHTML = mode === 'LAB'
+      ? `<strong>LAB</strong> · ${draw} · 1–4: aislar capa · 0: restaurar figura · R: reset (cero partículas) · P: performance`
+      : `<strong>PERFORMANCE</strong> · ${draw} · 1–4: capas dentro/fuera · 5: todas · 0: restaurar figura · espacio: invertir núcleo · rueda: intensidad`;
+  }
+
+  // MODO DIBUJO ------------------------------------------------------------
+  // Mientras dibujas, la órbita queda bloqueada: el puntero es el pincel y no
+  // la cámara. Al salir del modo dibujo vuelves a poder girar la vista.
+  const setDrawMode = (active) => {
+    drawMode = active;
+    drawing = false;
+    hasLastStamp = false;
+    orbit.enabled = !drawMode && mode === 'LAB';
+    attractorHelper.visible = mode === 'LAB' && !drawMode;
+    canvas.style.cursor = drawMode ? 'crosshair' : '';
+    panel?.setDrawMode(drawMode);
+    updateHud();
+  };
+
+  const setMode = (next) => {
+    mode = next;
+    const lab = mode === 'LAB';
+    panel?.setVisible(lab);
+    axes.visible = lab;
+    attractorHelper.visible = lab && !drawMode;
+    orbit.enabled = lab && !drawMode;
+    updateHud();
+  };
+
+  // Traza continua: cada sello cubre el tramo recorrido desde el sello
+  // anterior, así un movimiento rápido del puntero no deja huecos. Un tramo
+  // muy largo se parte para que la densidad de partículas no caiga.
+  function strokeTo(target) {
+    if (!hasLastStamp) {
+      simulation.stamp(target);
+      lastStamp.copy(target);
+      hasLastStamp = true;
+      return;
+    }
+    const distance = target.distanceTo(lastStamp);
+    if (distance < MIN_SEGMENT) return;
+
+    const steps = Math.min(Math.ceil(distance / MAX_SEGMENT), 16);
+    segmentStart.copy(lastStamp);
+    for (let s = 1; s <= steps; s++) {
+      segmentEnd.lerpVectors(lastStamp, target, s / steps);
+      simulation.stamp(segmentStart, segmentEnd);
+      segmentStart.copy(segmentEnd);
+    }
+    lastStamp.copy(target);
+  }
+
+  canvas.addEventListener('pointerdown', (event) => {
+    if (!drawMode) return;
+    event.preventDefault();
+    canvas.setPointerCapture(event.pointerId);
+    drawing = true;
+    hasLastStamp = false;
+    if (pointerToWorld(event, hit)) strokeTo(hit);
+  });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (!drawMode || !drawing) return;
+    if (pointerToWorld(event, hit)) strokeTo(hit);
+  });
+
+  const endStroke = (event) => {
+    if (!drawing) return;
+    drawing = false;
+    hasLastStamp = false;
+    if (event && canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+    panel?.refresh();
+    updateHud();
+  };
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+
+  // Fuera del modo dibujo el puntero conduce dónde se ancla la capa Núcleo.
+  addEventListener('pointermove', (event) => {
+    if (drawMode) return;
+    if (pointerToWorld(event, hit)) {
       params.attractor.value.copy(hit);
       attractorHelper.position.copy(hit);
     }
   });
 
-  let paused = false;
-  let mode = 'LAB';
-  let panel;
-  let savedRadialStrength = params.radialStrength.value;
-
-  // Identidad de capa: mismo número en LAB (prueba aislada, con reset) y en
-  // PERFORMANCE (encendido/apagado en vivo, sin reset) para la misma capa.
+  // Identidad de capa: mismo número en LAB (prueba aislada, sobre la figura
+  // restaurada) y en PERFORMANCE (encendido/apagado en vivo) para la misma capa.
   const LAYER_KEYS = {
     Digit1: { id: 'pulso', enabled: 'vortexEnabled' },
     Digit2: { id: 'nucleo', enabled: 'radialEnabled' },
@@ -78,9 +193,7 @@ async function main() {
     Digit4: { id: 'friccion', enabled: 'dragEnabled' }
   };
 
-  // Pruebas de LAB: aíslan una capa y resetean, para poder predecir y
-  // verificar su efecto por separado antes de tocarla en vivo.
-  const applyPreset = (id) => {
+  const allLayersOff = () => {
     params.windEnabled.value = 0;
     params.radialEnabled.value = 0;
     params.vortexEnabled.value = 0;
@@ -88,6 +201,13 @@ async function main() {
     params.wind.value.set(0, 0, 0);
     params.initialSpeed.value = 0;
     params.intensity.value = 1;
+  };
+
+  // Pruebas de LAB: aíslan una capa y devuelven la figura a su estado
+  // dibujado, para poder predecir y verificar el efecto de esa capa sobre la
+  // MISMA condición inicial todas las veces.
+  const applyPreset = (id) => {
+    allLayersOff();
 
     if (id === 'inercia') {
       params.initialSpeed.value = 0.8;
@@ -114,8 +234,16 @@ async function main() {
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.12;
     }
+    simulation.restoreFigure();
+    panel?.refresh();
+  };
+
+  // Estado inicial del instrumento: cero partículas y ninguna fuerza activa.
+  const resetAll = () => {
+    allLayersOff();
     simulation.reset();
     panel?.refresh();
+    updateHud();
   };
 
   // PERFORMANCE: entra/sale una capa de la mezcla sin resetear el sistema -
@@ -133,30 +261,19 @@ async function main() {
     panel?.refresh();
   };
 
-  const setMode = (next) => {
-    mode = next;
-    const lab = mode === 'LAB';
-    panel.setVisible(lab);
-    axes.visible = lab;
-    attractorHelper.visible = lab;
-    orbit.enabled = lab;
-    hud.innerHTML = lab
-      ? '<strong>LAB</strong> · P: performance · R: reset · 0–5: pruebas de capa'
-      : '<strong>PERFORMANCE</strong> · P: lab · 1–4: capas dentro/fuera · 5: todas · espacio: invertir núcleo · rueda: intensidad · puntero: posición del núcleo';
-  };
-
   panel = createLabPanel({
     params,
-    onReset: () => simulation.reset(),
+    onReset: resetAll,
+    onRestore: () => simulation.restoreFigure(),
+    onSeedCloud: () => { simulation.seedCloud(); panel?.refresh(); },
+    onDrawToggle: () => setDrawMode(!drawMode),
     onPreset: applyPreset,
     onModeChange: () => setMode(mode === 'LAB' ? 'PERFORMANCE' : 'LAB'),
     onPauseChange: () => paused = !paused
   });
 
-  const hud = document.createElement('div');
-  hud.className = 'hud';
-  document.body.append(hud);
   setMode('LAB');
+  setDrawMode(false);
 
   // OSCILOSCOPIO -----------------------------------------------------------
   // Grafica la velocidad promedio real de las partículas, leída de vuelta
@@ -167,19 +284,28 @@ async function main() {
 
   async function sampleAverageSpeed() {
     if (samplingVelocity) return;
+    const aliveCount = simulation.getAliveCount();
+    if (aliveCount === 0) {
+      scope.push(0);
+      return;
+    }
     samplingVelocity = true;
     try {
       const raw = await renderer.getArrayBufferAsync(simulation.velocityBuffer.value);
       const floats = new Float32Array(raw);
-      const n = floats.length / 3;
+      // OJO: en WGSL un vec3 se alinea a 16 bytes, así que el buffer avanza de
+      // 4 en 4 floats por partícula, no de 3 en 3. Leerlo con paso 3 desalinea
+      // las componentes y da un promedio falso.
+      const stride = floats.length / simulation.count;
       let sum = 0;
-      for (let i = 0; i < n; i++) {
-        const vx = floats[i * 3];
-        const vy = floats[i * 3 + 1];
-        const vz = floats[i * 3 + 2];
+      // Las partículas vivas ocupan siempre los primeros slots del anillo.
+      for (let i = 0; i < aliveCount; i++) {
+        const vx = floats[i * stride];
+        const vy = floats[i * stride + 1];
+        const vz = floats[i * stride + 2];
         sum += Math.sqrt(vx * vx + vy * vy + vz * vz);
       }
-      scope.push(sum / n);
+      scope.push(sum / aliveCount);
     } finally {
       samplingVelocity = false;
     }
@@ -187,14 +313,15 @@ async function main() {
   setInterval(sampleAverageSpeed, 150);
 
   // LIVE INSTRUMENT MAPPING FOR LesAlpx ------------------------------------
-  // Pocos controles con significado: en LAB, los números aíslan y resetean
-  // una capa para verificarla; en PERFORMANCE, los mismos números la meten
-  // o sacan de la mezcla en vivo, sin resetear el sistema.
+  // Pocos controles con significado: D dibuja la condición inicial, los
+  // números conducen las capas de fuerza, 0 devuelve la figura a su estado
+  // dibujado y R vuelve al estado inicial de cero partículas.
   addEventListener('keydown', (event) => {
     if (event.repeat) return;
+    if (event.code === 'KeyD') setDrawMode(!drawMode);
     if (event.code === 'KeyP') setMode(mode === 'LAB' ? 'PERFORMANCE' : 'LAB');
-    if (event.code === 'KeyR') simulation.reset();
-    if (event.code === 'Digit0' && mode === 'LAB') applyPreset('inercia');
+    if (event.code === 'KeyR') resetAll();
+    if (event.code === 'Digit0') simulation.restoreFigure();
 
     const layer = LAYER_KEYS[event.code];
     if (layer) {
@@ -232,7 +359,7 @@ async function main() {
     renderer.setSize(innerWidth, innerHeight);
   });
 
-  simulation.reset();
+  resetAll();
 
   // FRAME LOOP ------------------------------------------------------------
   renderer.setAnimationLoop(() => {
