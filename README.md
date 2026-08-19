@@ -103,5 +103,6 @@ cómo se relacionan los archivos.
 
 ## Documentación complementaria
 
+- [Cambios sobre el proyecto base](CAMBIOS.md) — qué se modificó, por qué y cómo se verificó.
 - [Guía del estudiante](GUIA_ESTUDIANTE.md)
 - [Validación y depuración](PRUEBAS_Y_DEPURACION.md)

@@ -103,8 +103,14 @@ export function createLabPanel({
     windY: params.wind.value.y
   };
 
+  // Se guarda la referencia de este botón (los demás no la necesitan) porque
+  // tiene que reflejar el estado del modo dibujo: la tecla D puede cambiarlo sin
+  // pasar por el panel, y el botón quedaría mintiendo. Lo sincroniza setDrawMode().
   const drawButton = button(figure, 'Modo dibujo: OFF · D', () => onDrawToggle?.());
   refreshers.push(rangeRow(figure, 'brushRadius (grosor)', state, 'brushRadius', 0.01, 0.4, 0.005, (v) => params.brushRadius.value = v, () => params.brushRadius.value));
+  // initialSpeed vive aquí, junto al pincel, y no en «Simulación», porque solo
+  // afecta a las partículas en el instante de nacer: cambiarlo no mueve nada de
+  // lo ya dibujado, solo lo que se dibuje o restaure a partir de ahora.
   refreshers.push(rangeRow(figure, 'initialSpeed (al nacer)', state, 'initialSpeed', 0, 2, 0.01, (v) => params.initialSpeed.value = v, () => params.initialSpeed.value));
   button(figure, 'Restaurar figura · 0', () => onRestore?.());
   button(figure, 'Sembrar nube de prueba', () => onSeedCloud?.());
@@ -160,6 +166,8 @@ export function createLabPanel({
   return {
     element: panel,
     setVisible(visible) { panel.classList.toggle('hidden', !visible); },
+    // Lo llama main.js cada vez que cambia el modo dibujo, venga del botón o de
+    // la tecla D, para que panel y estado real no se desincronicen.
     setDrawMode(active) {
       drawButton.textContent = active ? 'Modo dibujo: ON · D' : 'Modo dibujo: OFF · D';
       drawButton.classList.toggle('active', active);

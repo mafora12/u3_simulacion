@@ -23,8 +23,10 @@ export function createParameters() {
     brushFrom: uniform(new THREE.Vector3(0.0, 0.0, 0.0)),
     brushTo: uniform(new THREE.Vector3(0.0, 0.0, 0.0)),
     brushRadius: uniform(0.06),
-    // Slot del buffer donde escribe el próximo sello del pincel, y semilla
-    // para que dos sellos en el mismo slot no repitan la misma dispersión.
+    // Ranura del buffer donde escribe el próximo sello, y semilla para que dos
+    // sellos en la misma ranura no repitan la misma dispersión.
+    // El segundo argumento fija el tipo: sin él, `uniform(0)` sería un float y
+    // no se podría sumar al índice de instancia, que es un entero sin signo.
     spawnCursor: uniform(0, 'uint'),
     spawnSeed: uniform(0, 'uint'),
 
