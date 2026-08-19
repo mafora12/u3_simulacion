@@ -18,23 +18,35 @@ import {
 } from 'three/tsl';
 
 export function createSimulation({ renderer, scene, params, count = 131072, stampSize = 256 }) {
-  // El buffer en GPU es de tamaño fijo, pero el sistema arranca en CERO
-  // partículas: lo que crece al dibujar es cuántos slots están ocupados.
-  // Cada pincelada ocupa un bloque exacto de `stampSize` slots, así que el
-  // cursor nunca parte un bloque en dos y no hace falta envolverlo en la GPU.
+  // «Cero partículas» no puede significar «buffer vacío»: un `instancedArray`
+  // se reserva en la GPU con tamaño fijo al arrancar y no se puede redimensionar
+  // en caliente. Lo que sí se puede es marcar qué slots están ocupados. Ese es
+  // el truco de todo este archivo: el buffer siempre tiene `count` ranuras y lo
+  // que crece al dibujar es cuántas están vivas.
+  //
+  // Cada pincelada ocupa un bloque exacto y contiguo de `stampSize` ranuras. Si
+  // `count` es múltiplo de `stampSize`, el cursor nunca parte un bloque en dos
+  // al dar la vuelta, y por eso el shader de spawn no necesita hacer módulo:
+  // basta con sumar el cursor al índice local.
   if (count % stampSize !== 0) {
     throw new Error(`count (${count}) debe ser múltiplo de stampSize (${stampSize}).`);
   }
   const maxStamps = count / stampSize;
 
   // STATE -----------------------------------------------------------------
-  // Cada partícula tiene posición, velocidad y un flag de si está viva.
+  // Posición y velocidad son el estado físico. `aliveBuffer` es nuevo: guarda
+  // 1.0 si la ranura contiene una partícula y 0.0 si está vacía. Se consulta en
+  // dos sitios, y en ambos hace falta: en el compute (para no integrar ranuras
+  // vacías) y en el render (para no dibujarlas).
   const positionBuffer = instancedArray(count, 'vec3');
   const velocityBuffer = instancedArray(count, 'vec3');
   const aliveBuffer = instancedArray(count, 'float');
 
   // CLEAR -----------------------------------------------------------------
-  // Estado inicial real del instrumento: ninguna partícula existe.
+  // Estado inicial real del instrumento: ninguna partícula existe. Marcar
+  // `alive = 0` bastaría para que desaparezcan, pero también se ponen a cero
+  // posición y velocidad para que una ranura reutilizada más tarde no arrastre
+  // basura del trazo anterior.
   const clearParticles = Fn(() => {
     positionBuffer.element(instanceIndex).assign(vec3(0.0));
     velocityBuffer.element(instanceIndex).assign(vec3(0.0));
@@ -47,7 +59,14 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
   // trayectoria: la velocidad de nacimiento es `initialSpeed` (0 por defecto,
   // es decir, la figura se queda quieta hasta que actúa una fuerza).
   const spawnSegment = Fn(() => {
+    // Este dispatch lanza solo `stampSize` hilos, no `count`: cada hilo escribe
+    // una ranura del bloque que arranca en el cursor. Por eso dibujar es barato
+    // aunque el sistema tenga 131072 partículas.
     const i = params.spawnCursor.add(instanceIndex);
+
+    // La semilla mezcla el índice con un contador que la CPU cambia en cada
+    // sello. Sin ese contador, dos sellos que cayeran en la misma ranura
+    // producirían exactamente la misma dispersión y el trazo se vería repetido.
     const seed = i.add(params.spawnSeed);
 
     const r1 = hash(seed.add(uint(11)));
@@ -58,15 +77,20 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     const r6 = hash(seed.add(uint(89)));
     const r7 = hash(seed.add(uint(101)));
 
-    // Reparto estratificado sobre el tramo: una partícula por franja, con
-    // desplazamiento aleatorio dentro de ella, para que no queden peines.
+    // Reparto estratificado a lo largo del tramo: a cada hilo le toca una franja
+    // (índice / total) y se mueve al azar dentro de ella (+ r1). Repartir solo
+    // por índice dejaría un peine de puntos regulares; repartir solo al azar
+    // dejaría claros y grumos. Estratificar da lo mejor de ambos.
     const t = instanceIndex.toFloat().add(r1).div(float(stampSize));
     const center = mix(params.brushFrom, params.brushTo, t);
 
-    // Dispersión dentro del radio del pincel, para que el trazo tenga grosor.
+    // Dispersión alrededor del eje del tramo, para que el trazo tenga grosor y
+    // no sea una línea de un solo punto de ancho.
     const jitter = vec3(r2, r3, r4).sub(0.5).mul(2.0).mul(params.brushRadius);
 
     positionBuffer.element(i).assign(center.add(jitter));
+    // Nacer con velocidad `initialSpeed`, que por defecto es 0: la figura queda
+    // quieta y solo se moverá cuando una capa de fuerza actúe sobre ella.
     velocityBuffer.element(i).assign(vec3(r5, r6, r7).sub(0.5).mul(params.initialSpeed));
     aliveBuffer.element(i).assign(float(1.0));
   })().compute(stampSize).setName('Spawn Brush Segment');
@@ -99,7 +123,11 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     const v = velocityBuffer.element(instanceIndex);
     const alive = aliveBuffer.element(instanceIndex);
 
-    // Los slots vacíos no se integran: no existen todavía.
+    // Toda la física queda dentro de este If: una ranura vacía no se integra,
+    // porque no contiene una partícula todavía. Se compara con 0.5 en vez de con
+    // 1.0 porque `alive` es un float y comparar floats por igualdad exacta es
+    // frágil; el valor solo puede ser 0.0 o 1.0, así que el punto medio separa
+    // los dos casos sin ambigüedad.
     If(alive.greaterThan(0.5), () => {
       const dt = params.dt.mul(params.timeScale);
       const force = vec3(0.0).toVar();
@@ -156,7 +184,11 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     transparent: true
   });
 
-  // Un slot vacío se dibuja con escala 0: no ocupa ni un píxel.
+  // El mismo flag que usa el compute se lee aquí como atributo de instancia.
+  // Una ranura vacía sale con escala 0 (el quad degenera y no rasteriza ni un
+  // píxel) y además con opacidad 0. Con una de las dos bastaría; se hacen las
+  // dos porque la de escala ahorra trabajo de rasterizado y la de opacidad deja
+  // el resultado explícito en el color.
   const aliveAttribute = aliveBuffer.toAttribute();
 
   material.positionNode = positionBuffer.toAttribute();
@@ -179,35 +211,49 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
   scene.add(mesh);
 
   // FIGURA DIBUJADA -------------------------------------------------------
-  // La figura se guarda en CPU como la lista de sellos que la componen. Eso
-  // permite volver al estado dibujado tantas veces como haga falta: predecir,
-  // probar una capa, y volver a la misma condición inicial para comparar.
+  // La GPU guarda el estado ACTUAL de las partículas, que las fuerzas van
+  // deformando. Para poder volver al estado DIBUJADO hace falta recordar aparte
+  // cómo era la figura, y eso vive en la CPU: una lista de los tramos trazados.
+  //
+  // Es la única memoria del dibujo, y ocupa nada (dos vectores por tramo). Con
+  // ella, «restaurar figura» es simplemente volver a sellar la lista.
   const figure = [];
-  let cursor = 0;
-  let alive = 0;
-  let seed = 1;
+  let cursor = 0;   // próxima ranura libre del anillo
+  let alive = 0;    // cuántas ranuras están ocupadas (espejo en CPU del aliveBuffer)
+  let seed = 1;     // contador de semilla, distinto en cada sello
 
+  // Escribe un tramo en la GPU. No toca `figure`: eso lo decide quien llama,
+  // porque restaurar la figura re-escribe tramos que YA están en la lista y no
+  // deben duplicarse en ella.
   function writeSegment(from, to) {
     params.brushFrom.value.copy(from);
     params.brushTo.value.copy(to);
     params.spawnCursor.value = cursor;
+    // 7919 es primo; sumarlo hace que la semilla recorra muchos valores antes
+    // de repetirse. `>>> 0` la mantiene dentro de un entero sin signo de 32
+    // bits, que es el tipo del uniform.
     seed = (seed + 7919) >>> 0;
     params.spawnSeed.value = seed;
     renderer.compute(spawnSegment);
 
+    // El cursor da la vuelta al llegar al final: el pincel es un anillo. Si
+    // dibujas más de `maxStamps` tramos, los más viejos ceden su sitio.
     cursor = (cursor + stampSize) % count;
     alive = Math.min(alive + stampSize, count);
   }
 
-  // Añade un tramo a la figura (dibujar en vivo). Cuando la figura llena el
-  // buffer, el tramo más viejo cede su sitio: el pincel es un anillo.
+  // Añade un tramo a la figura (dibujar en vivo). La lista se recorta por el
+  // mismo extremo por el que el anillo sobrescribe, de modo que lo que recuerda
+  // la CPU y lo que contiene la GPU siguen coincidiendo.
   function stamp(from, to = from) {
     if (figure.length >= maxStamps) figure.shift();
     figure.push({ from: from.clone(), to: to.clone() });
     writeSegment(from, to);
   }
 
-  // Vuelve la figura a su estado dibujado, sin borrarla.
+  // Vuelve la figura a su estado dibujado, sin olvidarla. Limpia y vuelve a
+  // sellar desde el principio, así que el resultado es idéntico al del momento
+  // en que terminaste de dibujar (salvo la dispersión aleatoria del pincel).
   function restoreFigure() {
     renderer.compute(clearParticles);
     cursor = 0;
@@ -215,7 +261,9 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     for (const segment of figure) writeSegment(segment.from, segment.to);
   }
 
-  // Estado inicial del instrumento: cero partículas y sin figura.
+  // Estado inicial del instrumento: cero partículas y sin figura. La diferencia
+  // con restoreFigure() es justo esa: aquí la lista se vacía y el dibujo se
+  // pierde. Es lo que hace la tecla R.
   function reset() {
     renderer.compute(clearParticles);
     figure.length = 0;
@@ -223,6 +271,9 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     alive = 0;
   }
 
+  // Llena el sistema con la nube aleatoria del proyecto base. Sirve para
+  // verificar una fuerza sobre un estado inicial reproducible, que una figura
+  // hecha a mano nunca es. Descarta la figura porque ocupa todo el buffer.
   function seedCloud() {
     renderer.compute(seedCloudParticles);
     figure.length = 0;
@@ -252,6 +303,9 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     seedCloud,
     stepSimulation,
     dispose,
+    // `alive` y `figure` cambian con el tiempo, así que se exponen como
+    // funciones y no como valores: una propiedad se leería una sola vez y se
+    // quedaría congelada en el número que hubiera al construir el objeto.
     getAliveCount: () => alive,
     getFigureLength: () => figure.length
   };
