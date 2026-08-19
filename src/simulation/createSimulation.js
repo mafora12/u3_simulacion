@@ -132,32 +132,51 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
       const dt = params.dt.mul(params.timeScale);
       const force = vec3(0.0).toVar();
 
-      // 1) CAPA "Textura" (viento): una capa que empuja el campo en una
-      // dirección, como un pad o una capa sostenida entrando en la mezcla.
-      force.addAssign(params.wind.mul(params.windEnabled).mul(params.intensity));
-
-      // 2) CAPA "Núcleo" (radial, positivo = atracción, negativo = repulsión):
-      // el elemento que ancla el campo, como una raíz de bajo.
+      // Geometría compartida por las dos fuerzas radiales (atracción y
+      // repulsión): dirección unitaria hacia el atractor y distancia con
+      // softening, para no dividir por casi cero al caer sobre el centro.
       const toAttractor = params.attractor.sub(p);
       const distance = max(toAttractor.length(), params.softening);
       const radialDirection = toAttractor.div(distance);
-      const radialForce = radialDirection
-        .mul(params.radialStrength)
-        .div(distance.pow(2))
-        .mul(params.radialEnabled)
-        .mul(params.intensity);
-      force.addAssign(radialForce);
 
-      // 3) CAPA "Pulso" (vórtice, tangente a la dirección radial en Z): el
-      // arpegio/motorik que hace girar el campo alrededor del núcleo.
-      const zAxis = vec3(0.0, 0.0, 1.0);
-      const tangent = zAxis.cross(radialDirection);
-      force.addAssign(tangent.mul(params.vortexStrength).mul(params.vortexEnabled).mul(params.intensity));
+      // 1) ATRACCIÓN: hacia el atractor, con la ley del inverso del cuadrado.
+      force.addAssign(
+        radialDirection
+          .mul(params.attractStrength)
+          .div(distance.pow(2))
+          .mul(params.attractEnabled)
+          .mul(params.intensity)
+      );
 
-      // 4) CAPA "Fricción" (drag, F = -c v): ruido/distorsión que resta
-      // energía al sistema. No se escala por intensity - es un freno, no un
-      // empuje, y debe poder frenar el sistema incluso cuando intensity es alta.
+      // 2) REPULSIÓN: misma dirección, signo contrario, y caída con el CUBO de
+      // la distancia. El exponente distinto es lo que impide que atracción y
+      // repulsión sean la misma fuerza con el signo cambiado: la repulsión
+      // domina de cerca y la atracción de lejos, así que encendidas a la vez
+      // hay un radio de equilibrio y las partículas forman una cáscara.
+      force.addAssign(
+        radialDirection
+          .mul(params.repelStrength)
+          .div(distance.pow(3))
+          .mul(params.repelEnabled)
+          .mul(params.intensity)
+          .mul(-1.0)
+      );
+
+      // 3) FRICCIÓN (drag, F = -c v): resta energía al sistema. No se escala
+      // por intensity - es un freno, no un empuje, y debe poder frenar el
+      // sistema incluso cuando intensity es alta.
       force.addAssign(v.mul(params.dragCoefficient).mul(params.dragEnabled).mul(-1.0));
+
+      // 4) GRAVEDAD: campo uniforme hacia -Y, igual en todo el espacio. A
+      // diferencia de la atracción no depende de dónde esté el atractor ni de
+      // la distancia; por eso con las condiciones de contorno periódicas las
+      // partículas caen, salen por abajo y vuelven a entrar por arriba.
+      force.addAssign(
+        vec3(0.0, -1.0, 0.0)
+          .mul(params.gravityStrength)
+          .mul(params.gravityEnabled)
+          .mul(params.intensity)
+      );
 
       // INTEGRATION -------------------------------------------------------
       // Unit mass: a = F. Semi-implicit Euler: update v, then p.

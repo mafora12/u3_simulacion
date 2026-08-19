@@ -35,13 +35,11 @@ const MAX_SEGMENT = 0.5;       // largo máximo de un tramo, en unidades de mund
 // quedaba muda. Ver el bug documentado junto a `engageLayer`.
 //
 // Estos son los valores de reposo con los que se devuelve la voz a una capa
-// que entra en silencio. Coinciden con los de `parameters.js`, salvo `wind`,
-// que allí arranca en (0,0,0) y necesita una dirección propia (la misma que
-// usa el preset de LAB).
-const DEFAULT_WIND = Object.freeze({ x: 1.5, y: 0, z: 0 });
-const DEFAULT_VORTEX_STRENGTH = 1.4;
-const DEFAULT_RADIAL_STRENGTH = 2.2;
+// que entra en silencio. Coinciden con los de `parameters.js`.
+const DEFAULT_ATTRACT_STRENGTH = 2.2;
+const DEFAULT_REPEL_STRENGTH = 2.0;
 const DEFAULT_DRAG_COEFFICIENT = 0.12;
+const DEFAULT_GRAVITY_STRENGTH = 1.2;
 const DEFAULT_INTENSITY = 1;
 const DEFAULT_TIME_SCALE = 1;
 
@@ -49,19 +47,13 @@ const DEFAULT_TIME_SCALE = 1;
 // en cero. La tabla existe para que añadir una capa no obligue a tocar la
 // lógica de encendido: basta con describirla aquí.
 const LAYER_MAGNITUDES = Object.freeze({
-  vortexEnabled: { uniform: 'vortexStrength', fallback: DEFAULT_VORTEX_STRENGTH },
-  radialEnabled: { uniform: 'radialStrength', fallback: DEFAULT_RADIAL_STRENGTH },
-  windEnabled: { uniform: 'wind', fallback: DEFAULT_WIND },
-  dragEnabled: { uniform: 'dragCoefficient', fallback: DEFAULT_DRAG_COEFFICIENT }
+  attractEnabled: { uniform: 'attractStrength', fallback: DEFAULT_ATTRACT_STRENGTH },
+  repelEnabled: { uniform: 'repelStrength', fallback: DEFAULT_REPEL_STRENGTH },
+  dragEnabled: { uniform: 'dragCoefficient', fallback: DEFAULT_DRAG_COEFFICIENT },
+  gravityEnabled: { uniform: 'gravityStrength', fallback: DEFAULT_GRAVITY_STRENGTH }
 });
 
-// Las magnitudes son unas escalares (`radialStrength`) y otra vectorial
-// (`wind`), así que "¿está en cero?" y "restaurar" necesitan las dos formas.
-const isSilent = (value) => (typeof value === 'number' ? value === 0 : value.lengthSq() === 0);
-const restoreMagnitude = (uniform, fallback) => {
-  if (typeof fallback === 'number') uniform.value = fallback;
-  else uniform.value.copy(fallback);
-};
+const isSilent = (value) => value === 0;
 
 async function main() {
   const mount = document.querySelector('#app');
@@ -149,7 +141,10 @@ async function main() {
   let drawMode = false;
   let drawing = false;
   let panel;
-  let savedRadialStrength = params.radialStrength.value;
+  // ¿Está el campo radial invertido ahora mismo por tener el espacio pulsado?
+  // Hace falta recordarlo para deshacer el intercambio exactamente una vez al
+  // soltar, y no volver a invertir si llega un keyup suelto.
+  let radialSwapped = false;
 
   // Vectores reutilizables del trazo. Se declaran una sola vez porque los
   // eventos de puntero llegan decenas de veces por segundo y crear objetos en
@@ -284,7 +279,7 @@ async function main() {
   canvas.addEventListener('pointercancel', endStroke);
 
   // Fuera del modo dibujo el puntero recupera su función original: conducir
-  // dónde se ancla la capa Núcleo. Este listener va en window (no en el canvas)
+  // dónde se anclan atracción y repulsión. Este listener va en window (no en el canvas)
   // porque el atractor debe seguir al puntero también sobre el panel.
   addEventListener('pointermove', (event) => {
     if (drawMode) return;
@@ -297,20 +292,16 @@ async function main() {
   // Identidad de capa: mismo número en LAB (prueba aislada, sobre la figura
   // restaurada) y en PERFORMANCE (encendido/apagado en vivo) para la misma capa.
   const LAYER_KEYS = {
-    Digit1: { id: 'pulso', enabled: 'vortexEnabled', label: 'Pulso' },
-    Digit2: { id: 'nucleo', enabled: 'radialEnabled', label: 'Núcleo' },
-    Digit3: { id: 'textura', enabled: 'windEnabled', label: 'Textura' },
-    Digit4: { id: 'friccion', enabled: 'dragEnabled', label: 'Fricción' }
+    Digit1: { id: 'atraccion', enabled: 'attractEnabled', label: 'Atracción' },
+    Digit2: { id: 'repulsion', enabled: 'repelEnabled', label: 'Repulsión' },
+    Digit3: { id: 'friccion', enabled: 'dragEnabled', label: 'Fricción' },
+    Digit4: { id: 'gravedad', enabled: 'gravityEnabled', label: 'Gravedad' }
   };
 
   // Deja el sistema en silencio físico: ninguna fuerza y nacimiento en reposo.
   // Es el punto de partida común de todas las pruebas y del reset.
   const allLayersOff = () => {
-    params.windEnabled.value = 0;
-    params.radialEnabled.value = 0;
-    params.vortexEnabled.value = 0;
-    params.dragEnabled.value = 0;
-    params.wind.value.set(0, 0, 0);
+    for (const layer of Object.values(LAYER_KEYS)) params[layer.enabled].value = 0;
     params.initialSpeed.value = 0;
     params.intensity.value = 1;
   };
@@ -330,30 +321,34 @@ async function main() {
     // debe quedar fijado antes del restoreFigure() del final.
     if (id === 'inercia') {
       params.initialSpeed.value = 0.8;
-    } else if (id === 'pulso') {
-      params.vortexEnabled.value = 1;
-      params.vortexStrength.value = 2.5;
-    } else if (id === 'nucleo') {
-      params.radialEnabled.value = 1;
-      params.radialStrength.value = 3.0;
-    } else if (id === 'textura') {
-      params.windEnabled.value = 1;
-      params.wind.value.copy(DEFAULT_WIND);
+    } else if (id === 'atraccion') {
+      params.attractEnabled.value = 1;
+      params.attractStrength.value = 3.0;
+    } else if (id === 'repulsion') {
+      params.repelEnabled.value = 1;
+      params.repelStrength.value = 3.0;
     } else if (id === 'friccion') {
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.5;
       // La fricción es un freno: sobre una figura en reposo no se vería nada.
       // Nacen en movimiento justamente para poder observar cómo las frena.
       params.initialSpeed.value = 1.0;
+    } else if (id === 'gravedad') {
+      params.gravityEnabled.value = 1;
+      params.gravityStrength.value = DEFAULT_GRAVITY_STRENGTH;
     } else if (id === 'todas') {
-      params.vortexEnabled.value = 1;
-      params.vortexStrength.value = 1.4;
-      params.radialEnabled.value = 1;
-      params.radialStrength.value = 2.0;
-      params.windEnabled.value = 1;
-      params.wind.value.set(0.8, 0, 0);
+      // Atracción y repulsión juntas se equilibran en un radio (ver el comentario
+      // del shader): la figura se ordena en una cáscara alrededor del atractor.
+      // La gravedad la arrastra hacia abajo y la fricción impide que la mezcla
+      // se dispare, de modo que el conjunto se estabiliza en vez de explotar.
+      params.attractEnabled.value = 1;
+      params.attractStrength.value = DEFAULT_ATTRACT_STRENGTH;
+      params.repelEnabled.value = 1;
+      params.repelStrength.value = DEFAULT_REPEL_STRENGTH;
       params.dragEnabled.value = 1;
-      params.dragCoefficient.value = 0.12;
+      params.dragCoefficient.value = DEFAULT_DRAG_COEFFICIENT;
+      params.gravityEnabled.value = 1;
+      params.gravityStrength.value = 0.6;
     }
     simulation.restoreFigure();
     panel?.refresh();
@@ -377,14 +372,14 @@ async function main() {
   // sino los DOS multiplicadores globales que el shader aplica encima de él:
   //
   //   · `intensity` — la rueda del ratón lo conduce en vivo y llega hasta 0.
-  //     Con 0, Textura, Núcleo y Pulso empujan con fuerza cero. Es el caso más
-  //     fácil de provocar sin darse cuenta: la rueda está anunciada en el HUD
-  //     de PERFORMANCE y el panel (que mostraría el valor) está oculto ahí.
+  //     Con 0, atracción, repulsión y gravedad empujan con fuerza cero. Es el
+  //     caso más fácil de provocar sin darse cuenta: la rueda está anunciada en
+  //     el HUD de PERFORMANCE y el panel (que mostraría el valor) está oculto ahí.
   //   · `timeScale` — multiplica dt. Con 0 el sistema entero queda congelado,
   //     por muchas capas encendidas que haya.
   //
   // Y encima de eso, la magnitud propia de la capa también puede estar en cero
-  // (`wind` arranca así siempre; las demás si se baja su slider a 0 en LAB).
+  // si se baja su slider a 0 en LAB.
   //
   // En LAB nada de esto se nota porque cada tecla pasa por `allLayersOff()`,
   // que devuelve `intensity` a 1, y por `applyPreset()`, que fija la magnitud
@@ -394,14 +389,14 @@ async function main() {
   //
   // `engageLayer` las restablece las tres al ENCENDER, y solo cuando están en
   // el valor degenerado (cero): si el intérprete dejó `intensity` en 0.3 o
-  // subió `vortexStrength` a 6, se respeta su elección. Así una tecla suena
+  // subió `attractStrength` a 6, se respeta su elección. Así una tecla suena
   // siempre, sin importar qué se haya pulsado o girado antes.
   const engageLayer = (enabledKey) => {
     params[enabledKey].value = 1;
 
     const magnitude = LAYER_MAGNITUDES[enabledKey];
     const uniform = params[magnitude.uniform];
-    if (isSilent(uniform.value)) restoreMagnitude(uniform, magnitude.fallback);
+    if (isSilent(uniform.value)) uniform.value = magnitude.fallback;
 
     if (params.intensity.value === 0) params.intensity.value = DEFAULT_INTENSITY;
     if (params.timeScale.value === 0) params.timeScale.value = DEFAULT_TIME_SCALE;
@@ -427,6 +422,25 @@ async function main() {
     }
     panel?.refresh();
     updateHud();
+  };
+
+  // Intercambia atracción y repulsión: el gesto de la barra espaciadora.
+  // Si ninguna de las dos estaba encendida no habría nada que intercambiar y el
+  // gesto quedaría mudo, así que en ese caso entra la repulsión — un empujón
+  // hacia fuera es la lectura más natural de "invertir la nada".
+  const swapRadialLayers = () => {
+    const attracting = params.attractEnabled.value > 0;
+    const repelling = params.repelEnabled.value > 0;
+
+    if (!attracting && !repelling) {
+      engageLayer('repelEnabled');
+    } else {
+      params.attractEnabled.value = 0;
+      params.repelEnabled.value = 0;
+      if (attracting) engageLayer('repelEnabled');
+      if (repelling) engageLayer('attractEnabled');
+    }
+    panel?.refresh();
   };
 
   panel = createLabPanel({
@@ -515,20 +529,24 @@ async function main() {
       else toggleAllLayers();
     }
 
-    // Espacio invierte el núcleo mientras se mantiene pulsado. Pasa por
-    // `engageLayer` por el mismo motivo que las teclas de capa: es un gesto de
-    // PERFORMANCE y, sin él, quedaría mudo con `intensity` en cero.
+    // Espacio invierte el campo radial mientras se mantiene pulsado: lo que
+    // atraía repele y al revés. Antes esto cambiaba el signo de una única
+    // fuerza radial; ahora que atracción y repulsión son dos capas distintas,
+    // invertir es intercambiarlas.
     if (event.code === 'Space') {
       event.preventDefault();
-      engageLayer('radialEnabled');
-      savedRadialStrength = params.radialStrength.value;
-      params.radialStrength.value = -savedRadialStrength;
+      swapRadialLayers();
+      radialSwapped = true;
       updateHud();
     }
   });
 
   addEventListener('keyup', (event) => {
-    if (event.code === 'Space') params.radialStrength.value = savedRadialStrength;
+    if (event.code === 'Space' && radialSwapped) {
+      swapRadialLayers();
+      radialSwapped = false;
+      updateHud();
+    }
   });
 
   // Rueda: macro de intensidad en vivo, cuánto empujan las capas activas.

@@ -15,14 +15,24 @@ estado reproducible que no dependa del pulso de tu mano, usa «Sembrar nube de p
 |---|---|---|---|
 | Reposo | ninguna | figura dibujada, velocidad = 0 | nada se mueve: sin fuerza no hay cambio |
 | Inercia | ninguna | figura dibujada, velocidad ≠ 0 | movimiento sin aceleración deliberada |
-| +X | viento | figura dibujada, velocidad = 0 | `v.x` crece positiva |
-| Atracción | radial + | figura dibujada, velocidad = 0 | aceleración hacia atractor |
-| Repulsión | radial - | figura dibujada, velocidad = 0 | aceleración alejándose |
-| Vórtice | radial suave + tangencial | figura dibujada, velocidad = 0 | aparece giro, no solo caída radial |
+| Atracción (`1`) | atracción | figura dibujada, velocidad = 0 | la distancia media al atractor **baja** |
+| Repulsión (`2`) | repulsión | figura dibujada, velocidad = 0 | la distancia media al atractor **sube** |
+| Fricción (`3`) | fricción + algo que mueva | figura dibujada, velocidad ≠ 0 | la rapidez media crece **más despacio** que sin ella |
+| Gravedad (`4`) | gravedad | figura dibujada, velocidad = 0 | la `y` media baja; no depende de dónde esté el atractor |
+| Todas (`5`) | las cuatro | figura dibujada, velocidad = 0 | cáscara alrededor del atractor, arrastrada hacia abajo |
 
 La prueba de **Reposo** es la que separa este instrumento de una animación: si la figura
-se moviera sin ninguna capa activa, algo estaría empujando las posiciones por fuera del
+se moviera sin ninguna fuerza activa, algo estaría empujando las posiciones por fuera del
 modelo de fuerzas.
+
+Dos avisos sobre cómo medir:
+
+- **La fricción no se ve sobre una figura quieta.** Es un freno: sin velocidad previa no
+  tiene nada que frenar. Enciende antes la gravedad (o nace con `initialSpeed > 0`) y
+  compara la rapidez media con y sin fricción, no la rapidez a secas.
+- **Atracción y gravedad se confunden a ojo** si el atractor queda debajo de la figura:
+  las dos la hacen bajar. Para distinguirlas, mira si el efecto depende de dónde esté el
+  atractor: la gravedad tira hacia `-Y` sin importar dónde esté el puntero.
 
 ## Errores típicos generados por IA
 

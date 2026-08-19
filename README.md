@@ -59,7 +59,7 @@ dibujar primero y conducir fuerzas después.
 1. Pulsa `D` y traza una figura con el puntero. Esa figura es la **condición inicial**:
    define dónde nacen las partículas, no por dónde tienen que pasar. Nacen quietas.
 2. Vuelve a pulsar `D` para salir del modo dibujo. Ahí recuperas la órbita de cámara.
-3. Activa capas de fuerza con `1`–`4` y observa qué le ocurre a tu figura.
+3. Activa fuerzas con `1`–`4` (o todas con `5`) y observa qué le ocurre a tu figura.
 
 Dibujar **no** coreografía el movimiento: no se tocan posiciones a mano en ningún
 momento. El trazo sólo siembra el estado inicial y todo lo que pasa después emerge de
@@ -72,13 +72,29 @@ las fuerzas del compute shader.
 - `P`: LAB / PERFORMANCE.
 - `R`: reset al estado inicial: cero partículas, ninguna fuerza y figura olvidada.
 - `0`: devuelve la figura a su estado dibujado, sin borrarla.
-- `1`–`4`: las cuatro capas de fuerza (Pulso, Núcleo, Textura, Fricción). En LAB
-  aíslan una capa y restauran la figura para poder verificarla; en PERFORMANCE la
+- `1`–`4`: las cuatro fuerzas (Atracción, Repulsión, Fricción, Gravedad). En LAB
+  aíslan una fuerza y restauran la figura para poder verificarla; en PERFORMANCE la
   meten o sacan de la mezcla en vivo, sin cortar el sistema.
-- `5`: todas las capas.
-- puntero (fuera del modo dibujo): mueve el atractor de la capa Núcleo.
+- `5`: todas las fuerzas juntas.
+- puntero (fuera del modo dibujo): mueve el atractor al que apuntan la atracción y
+  la repulsión.
 - rueda: macro de intensidad.
-- espacio (PERFORMANCE): invierte temporalmente el signo de la fuerza radial.
+- espacio (PERFORMANCE): mientras se mantiene pulsado, intercambia atracción y
+  repulsión.
+
+Las cuatro fuerzas:
+
+| Tecla | Fuerza | Qué hace |
+|---|---|---|
+| `1` | Atracción | Tira hacia el atractor con la ley del inverso del cuadrado. |
+| `2` | Repulsión | Empuja alejándose del atractor; cae con el cubo de la distancia, así que manda de cerca. |
+| `3` | Fricción | Freno, `F = -c·v`. Sobre una figura quieta no se ve: hace falta que algo la mueva antes. |
+| `4` | Gravedad | Campo uniforme hacia abajo (`-Y`), independiente del atractor. |
+
+Atracción y repulsión usan exponentes distintos a propósito: si fueran el mismo con el
+signo cambiado, encendidas a la vez se anularían. Al caer con distinta rapidez tienen un
+radio de equilibrio, y con la tecla `5` la figura se ordena en una cáscara alrededor del
+atractor mientras la gravedad la arrastra y la fricción la estabiliza.
 
 ## Publicar en GitHub Pages
 

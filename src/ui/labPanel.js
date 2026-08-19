@@ -96,11 +96,10 @@ export function createLabPanel({
     maxSpeed: params.maxSpeed.value,
     particleSize: params.particleSize.value,
     intensity: params.intensity.value,
-    radialStrength: params.radialStrength.value,
-    vortexStrength: params.vortexStrength.value,
+    attractStrength: params.attractStrength.value,
+    repelStrength: params.repelStrength.value,
     dragCoefficient: params.dragCoefficient.value,
-    windX: params.wind.value.x,
-    windY: params.wind.value.y
+    gravityStrength: params.gravityStrength.value
   };
 
   // Se guarda la referencia de este botón (los demás no la necesitan) porque
@@ -127,29 +126,28 @@ export function createLabPanel({
 
   const layers = document.createElement('div');
   layers.className = 'group';
-  layers.innerHTML = '<h2>Capas</h2><p>Cada capa es algo que entra o sale de la mezcla, no un adorno visual.</p>';
+  layers.innerHTML = '<h2>Fuerzas</h2><p>Cada fuerza entra o sale de la mezcla, no es un adorno visual. Atracción y repulsión apuntan al atractor (el puntero); la gravedad es un campo constante hacia abajo.</p>';
   panel.append(layers);
 
-  refreshers.push(checkRow(layers, '1 · Pulso (vórtice)', params.vortexEnabled.value > 0, (v) => params.vortexEnabled.value = v ? 1 : 0, () => params.vortexEnabled.value > 0));
-  refreshers.push(rangeRow(layers, 'vortexStrength', state, 'vortexStrength', -8, 8, 0.05, (v) => params.vortexStrength.value = v, () => params.vortexStrength.value));
-  refreshers.push(checkRow(layers, '2 · Núcleo (radial)', params.radialEnabled.value > 0, (v) => params.radialEnabled.value = v ? 1 : 0, () => params.radialEnabled.value > 0));
-  refreshers.push(rangeRow(layers, 'radialStrength', state, 'radialStrength', -8, 8, 0.05, (v) => params.radialStrength.value = v, () => params.radialStrength.value));
-  refreshers.push(checkRow(layers, '3 · Textura (viento)', params.windEnabled.value > 0, (v) => params.windEnabled.value = v ? 1 : 0, () => params.windEnabled.value > 0));
-  refreshers.push(rangeRow(layers, 'wind.x', state, 'windX', -4, 4, 0.05, (v) => params.wind.value.x = v, () => params.wind.value.x));
-  refreshers.push(rangeRow(layers, 'wind.y', state, 'windY', -4, 4, 0.05, (v) => params.wind.value.y = v, () => params.wind.value.y));
-  refreshers.push(checkRow(layers, '4 · Fricción (drag)', params.dragEnabled.value > 0, (v) => params.dragEnabled.value = v ? 1 : 0, () => params.dragEnabled.value > 0));
+  refreshers.push(checkRow(layers, '1 · Atracción', params.attractEnabled.value > 0, (v) => params.attractEnabled.value = v ? 1 : 0, () => params.attractEnabled.value > 0));
+  refreshers.push(rangeRow(layers, 'attractStrength', state, 'attractStrength', 0, 8, 0.05, (v) => params.attractStrength.value = v, () => params.attractStrength.value));
+  refreshers.push(checkRow(layers, '2 · Repulsión', params.repelEnabled.value > 0, (v) => params.repelEnabled.value = v ? 1 : 0, () => params.repelEnabled.value > 0));
+  refreshers.push(rangeRow(layers, 'repelStrength', state, 'repelStrength', 0, 8, 0.05, (v) => params.repelStrength.value = v, () => params.repelStrength.value));
+  refreshers.push(checkRow(layers, '3 · Fricción (drag)', params.dragEnabled.value > 0, (v) => params.dragEnabled.value = v ? 1 : 0, () => params.dragEnabled.value > 0));
   refreshers.push(rangeRow(layers, 'dragCoefficient', state, 'dragCoefficient', 0, 1, 0.01, (v) => params.dragCoefficient.value = v, () => params.dragCoefficient.value));
+  refreshers.push(checkRow(layers, '4 · Gravedad', params.gravityEnabled.value > 0, (v) => params.gravityEnabled.value = v ? 1 : 0, () => params.gravityEnabled.value > 0));
+  refreshers.push(rangeRow(layers, 'gravityStrength', state, 'gravityStrength', 0, 5, 0.05, (v) => params.gravityStrength.value = v, () => params.gravityStrength.value));
 
   const tests = document.createElement('div');
   tests.className = 'group';
   tests.innerHTML = '<h2>Pruebas de capa (verificación)</h2><p>Cada prueba aísla una capa y devuelve la figura a su estado dibujado. Predice qué debería ocurrir antes de pulsar.</p>';
   panel.append(tests);
   for (const [id, label] of [
-    ['inercia', '0 · Inercia (sin capas)'],
-    ['pulso', '1 · Pulso solo'],
-    ['nucleo', '2 · Núcleo solo'],
-    ['textura', '3 · Textura sola'],
-    ['friccion', '4 · Fricción sola'],
+    ['inercia', '0 · Inercia (sin fuerzas)'],
+    ['atraccion', '1 · Atracción sola'],
+    ['repulsion', '2 · Repulsión sola'],
+    ['friccion', '3 · Fricción sola'],
+    ['gravedad', '4 · Gravedad sola'],
     ['todas', '5 · Todas juntas']
   ]) button(tests, label, () => onPreset(id));
 

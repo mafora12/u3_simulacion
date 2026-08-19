@@ -65,13 +65,20 @@ LAB, `1..5` aíslan una capa y devuelven la figura a su estado dibujado, así qu
 exploraciones parten del mismo punto y son comparables entre sí. Registra la predicción
 y la observación:
 
-0. **Reposo:** sin ninguna capa activa, la figura no se mueve en absoluto. Si se mueve,
+0. **Reposo:** sin ninguna fuerza activa, la figura no se mueve en absoluto. Si se mueve,
    hay algo empujando posiciones fuera del modelo de fuerzas.
 1. **Inercia:** sin fuerzas, una partícula que ya se mueve conserva aproximadamente su movimiento.
-2. **Fuerza constante +X:** partiendo con velocidad cero, la velocidad X debe crecer y las partículas deben desplazarse hacia +X.
-3. **Atracción:** la aceleración debe apuntar hacia el atractor.
-4. **Repulsión:** al invertir el signo de la fuerza radial, el comportamiento debe invertirse.
-5. **Vórtice:** una fuerza tangencial debe introducir giro; no debe equivaler a atracción radial.
+2. **Atracción (`1`):** la aceleración debe apuntar hacia el atractor, y ser más fuerte
+   cuanto más cerca esté.
+3. **Repulsión (`2`):** el comportamiento debe invertirse respecto a la atracción. No es
+   la misma fuerza con el signo cambiado: cae más deprisa con la distancia, así que se
+   nota sobre todo de cerca.
+4. **Fricción (`3`):** es un freno, no un empuje. Sobre una figura quieta no debe hacer
+   nada; sobre una en movimiento, debe restarle rapidez.
+5. **Gravedad (`4`):** un campo constante hacia abajo. A diferencia de la atracción, no
+   debe importar dónde esté el atractor: muévelo y el efecto no cambia.
+6. **Todas juntas (`5`):** atracción y repulsión se equilibran en un radio y la figura se
+   ordena en una cáscara; la gravedad la arrastra y la fricción evita que se dispare.
 
 No aceptes como evidencia «se ve interesante». Formula primero una predicción.
 

@@ -214,27 +214,128 @@ con la rueda y la siguiente tecla siguió sonando, que es la independencia de or
 También se comprobó que una elección deliberada sobrevive: con `intensity = 0.3` y
 `vortexStrength = 6`, pulsar `1` mantiene ambos valores intactos.
 
+## Cambio de conjunto de fuerzas: atracción, repulsión, fricción y gravedad
+
+**Qué se pidió.** Reemplazar las fuerzas del instrumento por **atracción, repulsión,
+fricción, gravedad** y **todas juntas**, accesibles con las teclas `1`–`5` en PERFORMANCE.
+
+**Qué había antes.** Cuatro capas heredadas de la lectura de LesAlpx: Pulso (vórtice),
+Núcleo (radial, donde el *signo* decidía si atraía o repelía), Textura (viento) y
+Fricción. Atracción y repulsión no eran dos fuerzas: eran la misma con el signo cambiado.
+
+**Qué hay ahora.**
+
+| Tecla | Fuerza | Ley | Notas |
+|---|---|---|---|
+| `1` | Atracción | `+dir · k / d²` | Hacia el atractor (lo conduce el puntero). |
+| `2` | Repulsión | `−dir · k / d³` | Alejándose del atractor. |
+| `3` | Fricción | `−c · v` | Freno. No se escala por `intensity`. |
+| `4` | Gravedad | `(0, −g, 0)` | Campo uniforme; no depende del atractor. |
+| `5` | Todas juntas | — | Las cuatro a la vez. |
+
+Se eliminaron el vórtice y el viento, y la capa radial única se dividió en dos
+independientes (`attractEnabled`/`attractStrength` y `repelEnabled`/`repelStrength`).
+
+**La decisión de diseño: por qué los exponentes son distintos.** Si atracción y repulsión
+usaran las dos la ley del inverso del cuadrado, serían literalmente la misma fuerza con el
+signo cambiado y, encendidas a la vez con la tecla `5`, se restarían hasta casi anularse:
+la tecla "todas juntas" daría el resultado más soso del instrumento. Haciendo que la
+repulsión caiga con el **cubo** de la distancia, cada una domina en un régimen distinto
+—la repulsión de cerca, la atracción de lejos— y existe un radio de equilibrio en
+`d = k_repulsión / k_atracción`. Con los valores por defecto (2.0 y 2.2) ese radio cae en
+≈ 0.9 unidades, dentro del espacio visible. El resultado es que `5` ordena la figura en
+una **cáscara** alrededor del atractor, con la gravedad arrastrándola y la fricción
+impidiendo que se dispare: un comportamiento emergente, que es justo lo que pide el
+encargo, en lugar de una resta que se cancela.
+
+**La gravedad no es una atracción con otro nombre.** La atracción apunta al atractor y
+depende de la distancia; la gravedad es un campo uniforme hacia `-Y`, igual en todo el
+espacio. Con las condiciones de contorno periódicas, las partículas caen, salen por abajo
+y vuelven a entrar por arriba. Combinada con la fricción alcanzan velocidad terminal.
+
+**Cambios por archivo.**
+
+- `src/simulation/parameters.js` — fuera `windEnabled`/`wind`, `vortexEnabled`/
+  `vortexStrength`, `radialEnabled`/`radialStrength`. Dentro `attractEnabled`/
+  `attractStrength` (2.2), `repelEnabled`/`repelStrength` (2.0), `gravityEnabled`/
+  `gravityStrength` (1.2). Se conservan `attractor` y `softening`, que ahora sirven a las
+  dos fuerzas radiales.
+- `src/simulation/createSimulation.js` — el bloque de fuerzas pasa a las cuatro nuevas. La
+  geometría radial (dirección unitaria y distancia con `softening`) se calcula **una vez**
+  y la comparten atracción y repulsión.
+- `src/main.js` — `LAYER_KEYS` y `LAYER_MAGNITUDES` remapeadas; presets de LAB reescritos
+  (`atraccion`, `repulsion`, `friccion`, `gravedad`, `todas`); `allLayersOff()` ahora
+  recorre `LAYER_KEYS` en vez de listar uniforms a mano, así que añadir una fuerza ya no
+  obliga a acordarse de tocarlo.
+- `src/ui/labPanel.js` — grupo «Fuerzas» con las cuatro casillas y sus magnitudes, y los
+  seis botones de prueba renombrados.
+
+**El gesto de la barra espaciadora.** Antes invertía el signo de la fuerza radial. Con
+atracción y repulsión ya separadas, invertir es **intercambiarlas**: mientras se mantiene
+pulsada, la que estaba encendida cede el sitio a la otra, y al soltar se deshace el
+intercambio. Si no había ninguna encendida entra la repulsión, para que el gesto nunca
+quede mudo.
+
+**Cómo se verificó.** Con pasos de física deterministas (`stepSimulation()`) y lectura de
+los buffers de vuelta desde la GPU, sobre una figura dibujada y con el atractor fijado
+lejos de ella. Cada fuerza se midió con la magnitud que la distingue de las demás:
+
+| Tecla | Métrica | Antes → después (60 pasos) |
+|---|---|---|
+| `1` Atracción | distancia media al atractor | 2.777 → **2.592** (se acerca) |
+| `2` Repulsión | distancia media al atractor | 2.777 → **2.845** (se aleja) |
+| `4` Gravedad | `y` media | 1.539 → **0.929** (cae) |
+| `3` Fricción | rapidez media bajo gravedad | sin fricción 1.200 → 2.400; **con fricción 1.200 → 2.196** |
+| `5` Todas | interruptores | `attract=1 repel=1 drag=1 gravity=1` |
+| espacio | interruptores | `attract=1 repel=0` → pulsado `attract=0 repel=1` → soltado `attract=1 repel=0` |
+
+La fricción se mide contra un sistema **en movimiento** a propósito: sobre una figura
+quieta un freno no puede hacer nada, así que compararla contra el reposo no probaría nada.
+
+Se repitió además la prueba de independencia de orden del bug anterior, ahora con el
+conjunto nuevo y forzando el estado hostil (`intensity = 0`, `timeScale = 0` y todas las
+magnitudes en `0`) **antes de cada pulsación**:
+
+| Orden | Desplazamiento por tecla |
+|---|---|
+| `1 → 2 → 4` | 0.081 · 0.118 · 0.323 |
+| `4 → 1 → 2` | 0.273 · 0.605 · 0.633 |
+| `2 → 4 → 1` | 0.031 · 0.236 · 0.543 |
+| `1 → 4 → 2` | 0.081 · 0.399 · 0.576 |
+
+Ninguna celda en cero: cada tecla se rescata a sí misma sin importar el orden.
+
+**Un falso positivo durante la verificación**, anotado porque es fácil repetirlo: una
+primera pasada dio `0.0000` para la tecla `1`. No era un fallo del código sino del arnés
+de pruebas, que arrancaba con la atracción ya encendida de una prueba anterior, de modo
+que la primera pulsación la **apagaba** —comportamiento correcto de un interruptor—. Al
+partir de un estado conocido, la celda pasó a 0.081. Conviene fijar el estado inicial
+antes de medir un toggle.
+
 ## Controles
 
 | Tecla | Acción |
 |---|---|
 | `D` | Entra/sale del modo dibujo. Bloquea la órbita mientras dibujas. |
-| `1`–`4` | Las cuatro capas: Pulso, Núcleo, Textura, Fricción. |
-| `5` | Todas las capas. |
+| `1` | Atracción (hacia el atractor). |
+| `2` | Repulsión (alejándose del atractor). |
+| `3` | Fricción (freno). |
+| `4` | Gravedad (campo constante hacia abajo). |
+| `5` | Las cuatro fuerzas juntas. |
 | `0` | Devuelve la figura a su estado dibujado, sin borrarla. |
 | `R` | Reset: cero partículas, ninguna fuerza, figura olvidada. |
 | `P` | LAB / PERFORMANCE. |
-| espacio | Invierte el núcleo mientras se mantiene pulsado. |
+| espacio | Intercambia atracción y repulsión mientras se mantiene pulsado. |
 | rueda | Macro de intensidad. |
 | puntero | Dibuja (en modo dibujo) o mueve el atractor (fuera de él). |
 
-El mismo número señala siempre la misma capa. Lo que cambia es qué significa pulsarlo:
+El mismo número señala siempre la misma fuerza. Lo que cambia es qué significa pulsarlo:
 en LAB la aísla y restaura la figura para verificarla; en PERFORMANCE la mete o la saca
 de la mezcla en vivo, sin cortar el sistema.
 
-En PERFORMANCE el HUD muestra qué capas están dentro de la mezcla y cuánto vale
-`intensity` (`1 Pulso ● · 2 Núcleo ○ · …`), porque el panel está oculto en ese modo y sin
-esa línea una capa encendida pero muda no se distingue de una apagada.
+En PERFORMANCE el HUD muestra qué fuerzas están dentro de la mezcla y cuánto vale
+`intensity` (`1 Atracción ● · 2 Repulsión ○ · …`), porque el panel está oculto en ese modo
+y sin esa línea una fuerza encendida pero muda no se distingue de una apagada.
 
 ## Cómo se verificó
 

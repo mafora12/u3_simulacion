@@ -30,26 +30,42 @@ export function createParameters() {
     spawnCursor: uniform(0, 'uint'),
     spawnSeed: uniform(0, 'uint'),
 
-    // Cada fuerza es una CAPA de la lectura de LesAlpx: algo que entra y sale
-    // de la mezcla mientras suena la pieza, no un slider decorativo.
-    // Todas arrancan APAGADAS: el instrumento empieza en silencio físico.
-    // Capa "Textura" (viento) -----------------------------------------------
-    windEnabled: uniform(0.0),
-    wind: uniform(new THREE.Vector3(0.0, 0.0, 0.0)),
+    // LAS CUATRO FUERZAS DEL INSTRUMENTO ------------------------------------
+    // Cada una es una CAPA: algo que entra y sale de la mezcla mientras suena
+    // la pieza, no un slider decorativo. Todas arrancan APAGADAS: el
+    // instrumento empieza en silencio físico.
 
-    // Capa "Núcleo" (radial: atracción/repulsión según el signo) ------------
-    radialEnabled: uniform(0.0),
+    // Punto al que apuntan atracción y repulsión. Lo conduce el puntero.
     attractor: uniform(new THREE.Vector3(0.0, 0.0, 0.0)),
-    radialStrength: uniform(2.2),
+    // Radio mínimo con el que se evalúan las fuerzas radiales. Sin él, una
+    // partícula que cae justo sobre el atractor divide por casi cero y sale
+    // disparada al infinito (la "singularidad radial").
     softening: uniform(0.35),
 
-    // Capa "Pulso" (vórtice) -------------------------------------------------
-    vortexEnabled: uniform(0.0),
-    vortexStrength: uniform(1.4),
+    // 1 · ATRACCIÓN (hacia el atractor, ley del inverso del cuadrado) --------
+    attractEnabled: uniform(0.0),
+    attractStrength: uniform(2.2),
 
-    // Capa "Fricción" (drag) -------------------------------------------------
+    // 2 · REPULSIÓN (alejándose del atractor) --------------------------------
+    // Cae con el CUBO de la distancia, no con el cuadrado como la atracción.
+    // Esa diferencia es deliberada: si ambas usaran el mismo exponente serían
+    // la misma fuerza con el signo cambiado y, encendidas a la vez (tecla 5),
+    // se anularían en una resta sosa. Con caídas distintas la repulsión manda
+    // de cerca y la atracción de lejos, así que juntas tienen un punto de
+    // equilibrio y las partículas se ordenan en una cáscara alrededor del
+    // atractor en vez de colapsar o dispersarse.
+    repelEnabled: uniform(0.0),
+    repelStrength: uniform(2.0),
+
+    // 3 · FRICCIÓN (drag, F = -c·v) ------------------------------------------
     dragEnabled: uniform(0.0),
     dragCoefficient: uniform(0.12),
+
+    // 4 · GRAVEDAD (campo constante hacia -Y) --------------------------------
+    // No apunta al atractor: es un campo uniforme, igual en todo el espacio.
+    // Esa es justamente la diferencia con la atracción, y se nota al aislarla.
+    gravityEnabled: uniform(0.0),
+    gravityStrength: uniform(1.2),
 
     // Macro de PERFORMANCE: cuánto empujan las capas activas ahora mismo.
     // No es una capa propia - escala Textura/Núcleo/Pulso en conjunto, para
