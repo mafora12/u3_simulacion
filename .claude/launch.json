@@ -3,12 +3,8 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "C:\\Users\\Daniel\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
-      "runtimeArgs": [
-        "C:\\Users\\Daniel\\AppData\\Local\\Temp\\claude\\D--Github-u3-simulacion\\a830519a-6dcc-42d6-b490-b6ded33c21a1\\scratchpad\\serve_no_vite.py",
-        "D:\\Github\\u3_simulacion",
-        "5173"
-      ],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 5173
     }
   ]

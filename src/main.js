@@ -22,6 +22,47 @@ const MAX_SEGMENT = 0.5;       // largo máximo de un tramo, en unidades de mund
                                // Un trazo más largo se parte en varios tramos para
                                // que la densidad de partículas no caiga al trazar rápido.
 
+// CONDICIONES PARA QUE UNA CAPA SUENE ------------------------------------
+// Encender el interruptor de una capa NO basta para que empuje. El shader
+// multiplica tres cosas, y si cualquiera vale cero la fuerza es cero:
+//
+//     fuerza = magnitud_de_la_capa × interruptor × intensity      (y dt = dt × timeScale)
+//
+// En LAB eso nunca se nota porque cada tecla pasa por `allLayersOff()`, que
+// devuelve `intensity` a 1, y por `applyPreset()`, que fija la magnitud de la
+// capa aislada. En PERFORMANCE no había nada equivalente: la tecla solo movía
+// el interruptor, así que con `intensity` o la magnitud en cero la capa
+// quedaba muda. Ver el bug documentado junto a `engageLayer`.
+//
+// Estos son los valores de reposo con los que se devuelve la voz a una capa
+// que entra en silencio. Coinciden con los de `parameters.js`, salvo `wind`,
+// que allí arranca en (0,0,0) y necesita una dirección propia (la misma que
+// usa el preset de LAB).
+const DEFAULT_WIND = Object.freeze({ x: 1.5, y: 0, z: 0 });
+const DEFAULT_VORTEX_STRENGTH = 1.4;
+const DEFAULT_RADIAL_STRENGTH = 2.2;
+const DEFAULT_DRAG_COEFFICIENT = 0.12;
+const DEFAULT_INTENSITY = 1;
+const DEFAULT_TIME_SCALE = 1;
+
+// Qué uniform lleva la magnitud de cada capa, y con qué valor revive si está
+// en cero. La tabla existe para que añadir una capa no obligue a tocar la
+// lógica de encendido: basta con describirla aquí.
+const LAYER_MAGNITUDES = Object.freeze({
+  vortexEnabled: { uniform: 'vortexStrength', fallback: DEFAULT_VORTEX_STRENGTH },
+  radialEnabled: { uniform: 'radialStrength', fallback: DEFAULT_RADIAL_STRENGTH },
+  windEnabled: { uniform: 'wind', fallback: DEFAULT_WIND },
+  dragEnabled: { uniform: 'dragCoefficient', fallback: DEFAULT_DRAG_COEFFICIENT }
+});
+
+// Las magnitudes son unas escalares (`radialStrength`) y otra vectorial
+// (`wind`), así que "¿está en cero?" y "restaurar" necesitan las dos formas.
+const isSilent = (value) => (typeof value === 'number' ? value === 0 : value.lengthSq() === 0);
+const restoreMagnitude = (uniform, fallback) => {
+  if (typeof fallback === 'number') uniform.value = fallback;
+  else uniform.value.copy(fallback);
+};
+
 async function main() {
   const mount = document.querySelector('#app');
 
@@ -118,13 +159,30 @@ async function main() {
   const segmentEnd = new THREE.Vector3();
   let hasLastStamp = false;                // ¿hay ya un punto previo con el que formar tramo?
 
+  // En PERFORMANCE el panel está oculto, así que el HUD es la ÚNICA ventana al
+  // estado del instrumento. Sin esta línea, una capa encendida pero muda (por
+  // `intensity` en cero, el bug de las teclas 1–5) es indistinguible de una
+  // capa apagada: el intérprete pulsa, no pasa nada, y no tiene forma de saber
+  // por qué. Mostrar interruptores e `intensity` hace visible la causa.
+  const layerStatusLine = () => {
+    const chips = Object.entries(LAYER_KEYS)
+      .map(([code, layer]) => {
+        const digit = code.replace('Digit', '');
+        const on = params[layer.enabled].value > 0;
+        return `${digit} ${layer.label} ${on ? '●' : '○'}`;
+      })
+      .join(' · ');
+    return `${chips} · intensidad ${params.intensity.value.toFixed(2)}`;
+  };
+
   function updateHud() {
     const draw = drawMode
       ? '<strong>DIBUJO</strong>: arrastra para trazar · D: salir'
       : 'D: dibujar figura';
     hud.innerHTML = mode === 'LAB'
       ? `<strong>LAB</strong> · ${draw} · 1–4: aislar capa · 0: restaurar figura · R: reset (cero partículas) · P: performance`
-      : `<strong>PERFORMANCE</strong> · ${draw} · 1–4: capas dentro/fuera · 5: todas · 0: restaurar figura · espacio: invertir núcleo · rueda: intensidad`;
+      : `<strong>PERFORMANCE</strong> · ${draw} · 1–4: capas dentro/fuera · 5: todas · 0: restaurar figura · espacio: invertir núcleo · rueda: intensidad
+         <br>${layerStatusLine()}`;
   }
 
   // MODO DIBUJO ------------------------------------------------------------
@@ -239,10 +297,10 @@ async function main() {
   // Identidad de capa: mismo número en LAB (prueba aislada, sobre la figura
   // restaurada) y en PERFORMANCE (encendido/apagado en vivo) para la misma capa.
   const LAYER_KEYS = {
-    Digit1: { id: 'pulso', enabled: 'vortexEnabled' },
-    Digit2: { id: 'nucleo', enabled: 'radialEnabled' },
-    Digit3: { id: 'textura', enabled: 'windEnabled' },
-    Digit4: { id: 'friccion', enabled: 'dragEnabled' }
+    Digit1: { id: 'pulso', enabled: 'vortexEnabled', label: 'Pulso' },
+    Digit2: { id: 'nucleo', enabled: 'radialEnabled', label: 'Núcleo' },
+    Digit3: { id: 'textura', enabled: 'windEnabled', label: 'Textura' },
+    Digit4: { id: 'friccion', enabled: 'dragEnabled', label: 'Fricción' }
   };
 
   // Deja el sistema en silencio físico: ninguna fuerza y nacimiento en reposo.
@@ -280,7 +338,7 @@ async function main() {
       params.radialStrength.value = 3.0;
     } else if (id === 'textura') {
       params.windEnabled.value = 1;
-      params.wind.value.set(1.5, 0, 0);
+      params.wind.value.copy(DEFAULT_WIND);
     } else if (id === 'friccion') {
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.5;
@@ -314,19 +372,61 @@ async function main() {
     updateHud();
   };
 
+  // BUG (teclas 1–5 mudas en PERFORMANCE): pulsar una tecla de capa marcaba su
+  // interruptor pero no movía ni una partícula. La causa no era el interruptor
+  // sino los DOS multiplicadores globales que el shader aplica encima de él:
+  //
+  //   · `intensity` — la rueda del ratón lo conduce en vivo y llega hasta 0.
+  //     Con 0, Textura, Núcleo y Pulso empujan con fuerza cero. Es el caso más
+  //     fácil de provocar sin darse cuenta: la rueda está anunciada en el HUD
+  //     de PERFORMANCE y el panel (que mostraría el valor) está oculto ahí.
+  //   · `timeScale` — multiplica dt. Con 0 el sistema entero queda congelado,
+  //     por muchas capas encendidas que haya.
+  //
+  // Y encima de eso, la magnitud propia de la capa también puede estar en cero
+  // (`wind` arranca así siempre; las demás si se baja su slider a 0 en LAB).
+  //
+  // En LAB nada de esto se nota porque cada tecla pasa por `allLayersOff()`,
+  // que devuelve `intensity` a 1, y por `applyPreset()`, que fija la magnitud
+  // de la capa. Ese es exactamente el motivo de que "las teclas funcionen en el
+  // editor pero no en performance": no era el modo, era que solo LAB
+  // restablecía las condiciones para que una capa se oiga.
+  //
+  // `engageLayer` las restablece las tres al ENCENDER, y solo cuando están en
+  // el valor degenerado (cero): si el intérprete dejó `intensity` en 0.3 o
+  // subió `vortexStrength` a 6, se respeta su elección. Así una tecla suena
+  // siempre, sin importar qué se haya pulsado o girado antes.
+  const engageLayer = (enabledKey) => {
+    params[enabledKey].value = 1;
+
+    const magnitude = LAYER_MAGNITUDES[enabledKey];
+    const uniform = params[magnitude.uniform];
+    if (isSilent(uniform.value)) restoreMagnitude(uniform, magnitude.fallback);
+
+    if (params.intensity.value === 0) params.intensity.value = DEFAULT_INTENSITY;
+    if (params.timeScale.value === 0) params.timeScale.value = DEFAULT_TIME_SCALE;
+  };
+
   // PERFORMANCE: entra/sale una capa de la mezcla sin resetear el sistema -
   // el comportamiento debe seguir emergiendo de las condiciones actuales,
   // no de un corte a un estado inicial.
   const toggleLayer = (enabledKey) => {
-    params[enabledKey].value = params[enabledKey].value > 0 ? 0 : 1;
+    const wasOn = params[enabledKey].value > 0;
+    if (wasOn) params[enabledKey].value = 0;
+    else engageLayer(enabledKey);
     panel?.refresh();
+    updateHud();
   };
 
   const toggleAllLayers = () => {
     const keys = Object.values(LAYER_KEYS).map((l) => l.enabled);
     const allOn = keys.every((k) => params[k].value > 0);
-    for (const k of keys) params[k].value = allOn ? 0 : 1;
+    for (const k of keys) {
+      if (allOn) params[k].value = 0;
+      else engageLayer(k);
+    }
     panel?.refresh();
+    updateHud();
   };
 
   panel = createLabPanel({
@@ -415,11 +515,15 @@ async function main() {
       else toggleAllLayers();
     }
 
+    // Espacio invierte el núcleo mientras se mantiene pulsado. Pasa por
+    // `engageLayer` por el mismo motivo que las teclas de capa: es un gesto de
+    // PERFORMANCE y, sin él, quedaría mudo con `intensity` en cero.
     if (event.code === 'Space') {
       event.preventDefault();
-      savedRadialStrength = params.radialStrength.value || 2.0;
-      params.radialEnabled.value = 1;
+      engageLayer('radialEnabled');
+      savedRadialStrength = params.radialStrength.value;
       params.radialStrength.value = -savedRadialStrength;
+      updateHud();
     }
   });
 
@@ -428,10 +532,14 @@ async function main() {
   });
 
   // Rueda: macro de intensidad en vivo, cuánto empujan las capas activas.
+  // El HUD se refresca aquí porque este es el control que puede dejar todas las
+  // capas mudas (intensidad 0) sin tocar ningún interruptor: si el número no se
+  // actualizara en pantalla, el silencio volvería a ser inexplicable.
   addEventListener('wheel', (event) => {
     const next = params.intensity.value - Math.sign(event.deltaY) * 0.05;
     params.intensity.value = Math.min(2, Math.max(0, next));
     panel?.refresh();
+    updateHud();
   }, { passive: true });
 
   addEventListener('resize', () => {

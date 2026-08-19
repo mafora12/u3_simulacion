@@ -126,6 +126,94 @@ Se detectó midiendo el tamaño real del buffer devuelto por `getArrayBufferAsyn
 16384 floats para 4096 partículas. Ahora el paso se calcula (`floats.length / count`) en
 vez de asumirse.
 
+## Bug: las teclas 1–5 no aplicaban fuerzas en PERFORMANCE
+
+**Síntoma reportado.** Las teclas de capa funcionan en LAB (el editor) pero en
+PERFORMANCE no aplican ninguna fuerza a la figura dibujada. Se esperaba poder cambiar de
+fuerza con cada tecla sin importar el orden en que se pulsen.
+
+**Primer diagnóstico, incompleto.** La primera revisión encontró un problema real —el
+vector `wind` arranca en `(0,0,0)` y la tecla `3` nunca le daba magnitud— y lo corrigió,
+pero se dio el bug por cerrado tras verificar **solo esa capa de forma aislada**. Esa
+verificación no reproducía el flujo real, donde el estado se arrastra entre modos, así
+que dejó pasar la causa principal, que afectaba a **las cinco teclas a la vez**.
+
+**Causa raíz.** El shader no aplica una fuerza por tener el interruptor encendido.
+Multiplica tres factores, y basta con que uno valga cero para que la fuerza sea cero:
+
+```
+fuerza = magnitud_de_la_capa × interruptor × intensity        (y  dt = dt × timeScale)
+```
+
+Los dos multiplicadores **globales** son los culpables, y ninguno es visible en
+PERFORMANCE:
+
+- **`intensity`** — la rueda del ratón lo conduce en vivo y llega hasta `0`. Con `0`,
+  Textura, Núcleo y Pulso empujan con fuerza cero. Es trivial provocarlo sin querer: la
+  rueda está anunciada en el HUD de PERFORMANCE, y el panel —lo único que mostraba el
+  valor— está **oculto** justamente en ese modo.
+- **`timeScale`** — multiplica `dt`. Con `0` el sistema entero queda congelado por muchas
+  capas que se enciendan.
+
+Y por debajo, la magnitud propia de cada capa también puede estar en cero (`wind` siempre
+arranca así; las demás si se baja su slider a `0` en LAB).
+
+**Por qué LAB sí funcionaba (la asimetría exacta).** En LAB, cada tecla pasa por
+`allLayersOff()`, que devuelve `intensity` a `1`, y por `applyPreset()`, que fija la
+magnitud de la capa aislada. Las tres condiciones quedan restablecidas en cada pulsación.
+En PERFORMANCE, `toggleLayer()` solo invertía el interruptor y **no restablecía nada**.
+No era un problema "del modo performance": era que solo LAB reponía las condiciones
+necesarias para que una capa se oiga.
+
+Medido en el navegador, con `intensity` en 0 y la misma tecla `2`:
+
+| Modo | `intensity` al pulsar | Desplazamiento medio |
+|---|---|---|
+| LAB | 0 → **1** (lo restaura `allLayersOff`) | **0.170** ✅ |
+| PERFORMANCE | 0 → **0** (no lo restaura nadie) | **0.000** ❌ |
+
+**Corrección** (`src/main.js`):
+
+- Tabla `LAYER_MAGNITUDES`: qué uniform lleva la magnitud de cada capa y con qué valor
+  revive si está en cero. Es data-driven para que añadir una capa no obligue a tocar la
+  lógica de encendido. Los valores de reposo coinciden con `parameters.js`, salvo `wind`,
+  que allí arranca en cero y toma la dirección del preset de LAB.
+- `engageLayer(enabledKey)`: único camino de encendido. Enciende el interruptor y
+  restablece las tres condiciones —magnitud propia, `intensity` y `timeScale`— **solo
+  cuando están en el valor degenerado cero**. Si el intérprete dejó `intensity` en `0.3`
+  o subió `vortexStrength` a `6`, se respeta su elección: se repara el silencio, no se
+  pisa una decisión.
+- `toggleLayer()`, `toggleAllLayers()` (tecla `5`) y el gesto de **espacio** (invertir
+  núcleo) pasan todos por `engageLayer`. Apagar sigue siendo apagar: la reparación solo
+  ocurre al encender.
+- **El HUD de PERFORMANCE ahora muestra el estado en vivo**: `1 Pulso ● · 2 Núcleo ○ …`
+  más el valor de `intensity`. Sin esto, una capa encendida pero muda es indistinguible
+  de una apagada, que es exactamente lo que hacía el bug tan desconcertante. La rueda
+  refresca el HUD porque es el control capaz de enmudecerlo todo sin tocar interruptores.
+
+**Cómo se verificó.** El bucle de animación solo avanza la física cuando la pestaña se
+está componiendo en pantalla, así que "mirar si se mueve" no distingue un bug de una
+pestaña en segundo plano. Se forzaron pasos deterministas con `stepSimulation()` y se
+midió el **desplazamiento real de posiciones** leyendo el buffer de vuelta desde la GPU
+(`getArrayBufferAsync`), no solo la velocidad.
+
+Partiendo de un estado deliberadamente hostil —`intensity = 0`, `timeScale = 0` y las
+magnitudes de todas las capas en `0`— sobre una figura dibujada, 40 pasos por tecla:
+
+| Orden de pulsación | Desplazamiento por tecla |
+|---|---|
+| `1 → 2 → 3` | 0.319 · 0.617 · 0.759 |
+| `3 → 1 → 2` | 0.342 · 0.745 · 1.018 |
+| `2 → 3 → 1` | 0.055 · 0.450 · 0.846 |
+| `5` (todas) | 0.501 — revive las cuatro capas, `intensity` y `timeScale` |
+
+Antes de la corrección, **todas** esas celdas eran `0.000`. Cada tecla se rescata a sí
+misma de forma independiente: entre prueba y prueba se volvió a forzar `intensity` a cero
+con la rueda y la siguiente tecla siguió sonando, que es la independencia de orden pedida.
+
+También se comprobó que una elección deliberada sobrevive: con `intensity = 0.3` y
+`vortexStrength = 6`, pulsar `1` mantiene ambos valores intactos.
+
 ## Controles
 
 | Tecla | Acción |
@@ -143,6 +231,10 @@ vez de asumirse.
 El mismo número señala siempre la misma capa. Lo que cambia es qué significa pulsarlo:
 en LAB la aísla y restaura la figura para verificarla; en PERFORMANCE la mete o la saca
 de la mezcla en vivo, sin cortar el sistema.
+
+En PERFORMANCE el HUD muestra qué capas están dentro de la mezcla y cuánto vale
+`intensity` (`1 Pulso ● · 2 Núcleo ○ · …`), porque el panel está oculto en ese modo y sin
+esa línea una capa encendida pero muda no se distingue de una apagada.
 
 ## Cómo se verificó
 
