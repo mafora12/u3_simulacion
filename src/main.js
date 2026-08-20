@@ -402,13 +402,30 @@ async function main() {
     if (params.timeScale.value === 0) params.timeScale.value = DEFAULT_TIME_SCALE;
   };
 
+  // Apagar una fuerza no frena nada por sí solo: lo que ya se movía sigue
+  // moviéndose (primera ley de Newton). Con la gravedad eso se notaba como un
+  // fallo: quitarla dejaba las partículas cayendo para siempre con la velocidad
+  // ya acumulada, reapareciendo por arriba una y otra vez por el wrap
+  // periódico. Como gesto de instrumento, apagar la gravedad tiene que
+  // significar "deja de caer", así que al soltarla se frena el sistema en seco.
+  //
+  // Se hace solo con la gravedad y con el apagado general (tecla 5). Quitar
+  // atracción, repulsión o fricción sigue dejando que el sistema siga su curso
+  // por inercia, que es la prueba de Inercia documentada y una herramienta
+  // expresiva: soltar la atracción y ver salir la figura disparada.
+  const HALTS_ON_RELEASE = 'gravityEnabled';
+
   // PERFORMANCE: entra/sale una capa de la mezcla sin resetear el sistema -
   // el comportamiento debe seguir emergiendo de las condiciones actuales,
   // no de un corte a un estado inicial.
   const toggleLayer = (enabledKey) => {
     const wasOn = params[enabledKey].value > 0;
-    if (wasOn) params[enabledKey].value = 0;
-    else engageLayer(enabledKey);
+    if (wasOn) {
+      params[enabledKey].value = 0;
+      if (enabledKey === HALTS_ON_RELEASE) simulation.halt();
+    } else {
+      engageLayer(enabledKey);
+    }
     panel?.refresh();
     updateHud();
   };
@@ -420,6 +437,8 @@ async function main() {
       if (allOn) params[k].value = 0;
       else engageLayer(k);
     }
+    // Apagarlo todo debe dejar el sistema quieto de verdad, no a la deriva.
+    if (allOn) simulation.halt();
     panel?.refresh();
     updateHud();
   };

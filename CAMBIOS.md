@@ -312,6 +312,55 @@ que la primera pulsación la **apagaba** —comportamiento correcto de un interr
 partir de un estado conocido, la celda pasó a 0.081. Conviene fijar el estado inicial
 antes de medir un toggle.
 
+## Apagar la gravedad ahora frena de verdad
+
+**Qué se pidió.** Que al deseleccionar la tecla `5` y/o la gravedad, las partículas dejen
+de caer inmediatamente.
+
+**Por qué no ocurría.** No era un fallo del interruptor: era la primera ley de Newton.
+Quitar una fuerza deja de **acelerar** el sistema, pero no le quita la velocidad que ya
+había acumulado. Con la gravedad eso se notaba como un fallo evidente: tras unos segundos
+cayendo, las partículas llevaban una velocidad considerable, y al apagarla seguían bajando
+a velocidad constante para siempre —reapareciendo por arriba una y otra vez por las
+condiciones de contorno periódicas—. Físicamente impecable; como gesto de instrumento,
+inservible: apagar la gravedad tiene que significar «deja de caer».
+
+**Corrección.**
+
+- `src/simulation/createSimulation.js` — nuevo paso de compute `haltParticles`, que pone
+  las velocidades a cero **sin tocar posiciones ni el flag de vida**: la figura se queda
+  exactamente donde está, pero quieta. Se expone como `halt()`. Es distinto de `reset()`
+  (que vacía el sistema) y de `restoreFigure()` (que rehace el trazo): aquí no se pierde
+  ni se mueve nada, solo se anula el movimiento.
+- `src/main.js` — `toggleLayer()` llama a `simulation.halt()` al apagar la gravedad, y
+  `toggleAllLayers()` lo llama al apagar todas las fuerzas con la tecla `5`.
+
+**Qué NO frena, y por qué.** Soltar atracción, repulsión o fricción sigue dejando el
+sistema en movimiento por inercia. Es deliberado por dos razones: es la **prueba de
+Inercia** que documenta `GUIA_ESTUDIANTE.md` (sin fuerzas, lo que se movía sigue
+moviéndose), y es una herramienta expresiva —soltar la atracción justo cuando la figura
+está más comprimida y verla salir disparada—. La gravedad es el caso distinto porque es
+la única que empuja siempre en la misma dirección: su inercia no decae ni se curva, solo
+produce una caída perpetua que no vuelve sola a ningún sitio.
+
+**Cómo se verificó.** Con pasos deterministas y lectura de los dos buffers desde la GPU:
+
+| Momento | Rapidez media | `y` media |
+|---|---|---|
+| Cayendo, gravedad ON (60 pasos) | 1.200 | 0.928 |
+| Justo al apagar la gravedad | **0.000000** | 0.928 |
+| 60 pasos después, sin fuerzas | **0.000000** | **0.928** (desplazamiento 0.000000) |
+
+| Comprobación | Resultado |
+|---|---|
+| Tecla `5` encendida (las cuatro) | rapidez 1.271 |
+| Tecla `5` deseleccionada | rapidez **0.000000**, desplazamiento en `y` **0.000000** |
+| Gravedad reactivada tras el frenado | rapidez 1.200 — vuelve a acelerar con normalidad |
+| Soltar la atracción (no debe frenar) | 0.379 → 0.379 → 0.379 tras 30 pasos: la inercia se conserva |
+
+La última fila es la que protege la prueba de Inercia: el frenado se aplica donde se pidió
+y en ningún otro sitio.
+
 ## Controles
 
 | Tecla | Acción |

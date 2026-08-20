@@ -53,6 +53,20 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     aliveBuffer.element(instanceIndex).assign(float(0.0));
   })().compute(count).setName('Clear Particles');
 
+  // HALT ------------------------------------------------------------------
+  // Pone las velocidades a cero SIN tocar posiciones ni el flag de vida: la
+  // figura se queda exactamente donde está, pero deja de moverse.
+  //
+  // Hace falta porque quitar una fuerza no frena nada por sí solo: la primera
+  // ley de Newton dice que lo que ya se movía sigue moviéndose. Al apagar la
+  // gravedad, las partículas conservaban toda la velocidad de caída acumulada
+  // y seguían bajando (y reapareciendo por arriba con el wrap periódico) para
+  // siempre. Como gesto de instrumento eso es inservible: apagar la gravedad
+  // tiene que significar "deja de caer", no "sigue cayendo sin acelerar".
+  const haltParticles = Fn(() => {
+    velocityBuffer.element(instanceIndex).assign(vec3(0.0));
+  })().compute(count).setName('Halt Particles');
+
   // SPAWN / PINCEL --------------------------------------------------------
   // Un sello del pincel: nacen `stampSize` partículas repartidas a lo largo
   // del segmento trazado. Esto escribe la CONDICIÓN INICIAL, no una
@@ -300,6 +314,13 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     alive = count;
   }
 
+  // Frena el sistema en seco dejando la figura donde está. Lo usa main.js al
+  // apagar la gravedad (o todas las fuerzas): sin esto, la velocidad ya
+  // acumulada haría que las partículas siguieran cayendo indefinidamente.
+  function halt() {
+    renderer.compute(haltParticles);
+  }
+
   function stepSimulation() {
     renderer.compute(updateParticles);
   }
@@ -320,6 +341,7 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     restoreFigure,
     reset,
     seedCloud,
+    halt,
     stepSimulation,
     dispose,
     // `alive` y `figure` cambian con el tiempo, así que se exponen como
