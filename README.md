@@ -463,7 +463,7 @@ fuerzas**. Estos son los gestos que el instrumento sabe ejecutar:
 | B — | `[ 0:05 - 2:00 ]` |un ritmo constante que ocasionalmente tenia como pulsos mas brillantes que de repente sonaba mas duro | una mezcla estable que a su vez iba generando tensión| 1+2+5 |un desorden que cada vez crecía mas pero a su vez se unía a otras particulas |
 | C — | `[ 2:00 - 2:15 ]` | silencio absoluto |oscuridad | tecla R |nada aparecía en pantalla para luego volver a dibujar |
 | D — | `[ 3:00 - 4:00 ]` |Un nuevo ritmo constante pero ya los pulsos son menos brillantes y más se escucha el sintetizador |mas explosiones menos desorden y mas unión de las partículas|1+2 + scroll |  partículas unidas lentamente hacia un núcleo y luego una explosión|
-| E — Cierre | `[ 4:00 – fin ]` | | | | |
+| E — Cierre | `[ 4:00 – fin ]` | es el mismo ritmo |un pulso de flujo |espaciado | un pulso de atracción y repulsión|
 
 
 **La cadena que debo poder explicar**, y que este score materializa:
