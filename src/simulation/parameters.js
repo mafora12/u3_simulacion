@@ -42,20 +42,32 @@ export function createParameters() {
     // disparada al infinito (la "singularidad radial").
     softening: uniform(0.35),
 
-    // 1 · ATRACCIÓN (hacia el atractor, ley del inverso del cuadrado) --------
+    // 1 · ATRACCIÓN (hacia el atractor, caída 1/d) ---------------------------
+    // La magnitud está calibrada contra la gravedad (1.2), que es constante en
+    // todo el espacio: a la distancia de trabajo típica (2 a 5 unidades) la
+    // atracción vale entre 3.0 y 1.2, así que se impone o al menos compite. Con
+    // los valores anteriores (2.2 con caída 1/d²) valía 0.55 a d=2 y 0.09 a
+    // d=5, y la gravedad la borraba del todo.
     attractEnabled: uniform(0.0),
-    attractStrength: uniform(2.2),
+    attractStrength: uniform(6.0),
 
-    // 2 · REPULSIÓN (alejándose del atractor) --------------------------------
-    // Cae con el CUBO de la distancia, no con el cuadrado como la atracción.
-    // Esa diferencia es deliberada: si ambas usaran el mismo exponente serían
-    // la misma fuerza con el signo cambiado y, encendidas a la vez (tecla 5),
-    // se anularían en una resta sosa. Con caídas distintas la repulsión manda
-    // de cerca y la atracción de lejos, así que juntas tienen un punto de
-    // equilibrio y las partículas se ordenan en una cáscara alrededor del
-    // atractor en vez de colapsar o dispersarse.
+    // 2 · REPULSIÓN (alejándose del atractor, caída 1/d²) --------------------
+    // Un exponente MÁS que la atracción, siempre. Esa diferencia es deliberada:
+    // si ambas usaran el mismo exponente serían la misma fuerza con el signo
+    // cambiado y, encendidas a la vez (tecla 5), se anularían en una resta
+    // sosa. Al caer más deprisa, la repulsión manda de cerca y la atracción de
+    // lejos, así que juntas tienen un radio de equilibrio d_eq = k_r / k_a y
+    // las partículas se ordenan en una cáscara en vez de colapsar o dispersarse.
+    //
+    // El valor es alto (18) por una razón que aparece al medir: como la
+    // repulsión cae más deprisa que la atracción —condición necesaria para que
+    // la cáscara exista— a la distancia de trabajo (3 a 5 unidades) es
+    // inevitablemente la más débil de las dos. Con 5.5 la gravedad la vencía y
+    // «la fuerza 2 no hacía nada». Con 18 vale ≈1.5 a d=3.4, por encima de la
+    // gravedad (1.2), y el radio de equilibrio queda en 18/6 = 3.0: una esfera
+    // amplia y legible en el encuadre en vez de un nudo diminuto.
     repelEnabled: uniform(0.0),
-    repelStrength: uniform(2.0),
+    repelStrength: uniform(18.0),
 
     // 3 · FRICCIÓN (drag, F = -c·v) ------------------------------------------
     dragEnabled: uniform(0.0),

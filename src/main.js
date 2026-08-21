@@ -36,8 +36,8 @@ const MAX_SEGMENT = 0.5;       // largo máximo de un tramo, en unidades de mund
 //
 // Estos son los valores de reposo con los que se devuelve la voz a una capa
 // que entra en silencio. Coinciden con los de `parameters.js`.
-const DEFAULT_ATTRACT_STRENGTH = 2.2;
-const DEFAULT_REPEL_STRENGTH = 2.0;
+const DEFAULT_ATTRACT_STRENGTH = 6.0;
+const DEFAULT_REPEL_STRENGTH = 18.0;
 const DEFAULT_DRAG_COEFFICIENT = 0.12;
 const DEFAULT_GRAVITY_STRENGTH = 1.2;
 const DEFAULT_INTENSITY = 1;
@@ -91,9 +91,20 @@ async function main() {
   });
 
   // LAB HELPERS -----------------------------------------------------------
+  // El marcador del atractor no es solo un adorno de LAB: es la ÚNICA pista
+  // visual de hacia dónde tiran la atracción y la repulsión. Antes se ocultaba
+  // en PERFORMANCE, y sin él el gesto de conducir el campo con el puntero era
+  // invisible: se veía a las partículas moverse, pero no hacia qué. Ahora
+  // también aparece en PERFORMANCE mientras alguna de las dos fuerzas radiales
+  // esté activa, y cambia de color para decir cuál de las dos manda.
+  const ATTRACTOR_COLORS = {
+    attract: new THREE.Color('#7fd4ff'),  // frío: recoge
+    repel: new THREE.Color('#ff9a5a'),    // cálido: expulsa
+    idle: new THREE.Color('#ffffff')
+  };
   const attractorHelper = new THREE.Mesh(
     new THREE.SphereGeometry(0.12, 16, 12),
-    new THREE.MeshBasicMaterial({ color: '#ffffff' })
+    new THREE.MeshBasicMaterial({ color: ATTRACTOR_COLORS.idle })
   );
   scene.add(attractorHelper);
   const axes = new THREE.AxesHelper(1.5);
@@ -194,8 +205,6 @@ async function main() {
     drawing = false;
     hasLastStamp = false;
     orbit.enabled = !drawMode && mode === 'LAB';
-    // El helper del atractor se oculta al dibujar: ahí el puntero no lo controla.
-    attractorHelper.visible = mode === 'LAB' && !drawMode;
     canvas.style.cursor = drawMode ? 'crosshair' : '';
     panel?.setDrawMode(drawMode);
     updateHud();
@@ -206,13 +215,30 @@ async function main() {
     const lab = mode === 'LAB';
     panel?.setVisible(lab);
     axes.visible = lab;
-    // Las dos condiciones se repiten aquí y en setDrawMode porque cualquiera de
-    // los dos interruptores puede cambiar y ambos mandan sobre lo mismo: la
-    // órbita solo está viva en LAB y fuera del modo dibujo.
-    attractorHelper.visible = lab && !drawMode;
+    // La condición se repite aquí y en setDrawMode porque cualquiera de los dos
+    // interruptores puede cambiar y ambos mandan sobre lo mismo: la órbita solo
+    // está viva en LAB y fuera del modo dibujo.
     orbit.enabled = lab && !drawMode;
     updateHud();
   };
+
+  // El marcador del atractor depende de cuatro cosas que cambian por caminos
+  // distintos (modo, modo dibujo y los dos interruptores radiales). En vez de
+  // repetir la regla en cada uno de esos sitios —que es como se desincronizan—
+  // se resuelve en un único lugar, una vez por frame, desde el bucle de render.
+  function updateAttractorHelper() {
+    const attracting = params.attractEnabled.value > 0;
+    const repelling = params.repelEnabled.value > 0;
+    // Mientras dibujas el puntero es pincel, no atractor: ahí siempre se oculta.
+    attractorHelper.visible = !drawMode && (mode === 'LAB' || attracting || repelling);
+
+    // Si las dos están activas manda la que domina a la distancia del propio
+    // marcador... que es cero, así que de cerca siempre gana la repulsión.
+    let tint = ATTRACTOR_COLORS.idle;
+    if (repelling) tint = ATTRACTOR_COLORS.repel;
+    else if (attracting) tint = ATTRACTOR_COLORS.attract;
+    attractorHelper.material.color.copy(tint);
+  }
 
   // Continúa el trazo hasta `target`, emitiendo uno o varios tramos.
   function strokeTo(target) {
@@ -323,10 +349,10 @@ async function main() {
       params.initialSpeed.value = 0.8;
     } else if (id === 'atraccion') {
       params.attractEnabled.value = 1;
-      params.attractStrength.value = 3.0;
+      params.attractStrength.value = 8.0;
     } else if (id === 'repulsion') {
       params.repelEnabled.value = 1;
-      params.repelStrength.value = 3.0;
+      params.repelStrength.value = 22.0;
     } else if (id === 'friccion') {
       params.dragEnabled.value = 1;
       params.dragCoefficient.value = 0.5;
@@ -590,6 +616,7 @@ async function main() {
   // FRAME LOOP ------------------------------------------------------------
   renderer.setAnimationLoop(() => {
     if (!paused) simulation.stepSimulation();
+    updateAttractorHelper();
     orbit.update();
     renderer.render(scene, camera);
     scope.draw(params.maxSpeed.value);

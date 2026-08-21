@@ -130,9 +130,9 @@ export function createLabPanel({
   panel.append(layers);
 
   refreshers.push(checkRow(layers, '1 · Atracción', params.attractEnabled.value > 0, (v) => params.attractEnabled.value = v ? 1 : 0, () => params.attractEnabled.value > 0));
-  refreshers.push(rangeRow(layers, 'attractStrength', state, 'attractStrength', 0, 8, 0.05, (v) => params.attractStrength.value = v, () => params.attractStrength.value));
+  refreshers.push(rangeRow(layers, 'attractStrength', state, 'attractStrength', 0, 20, 0.1, (v) => params.attractStrength.value = v, () => params.attractStrength.value));
   refreshers.push(checkRow(layers, '2 · Repulsión', params.repelEnabled.value > 0, (v) => params.repelEnabled.value = v ? 1 : 0, () => params.repelEnabled.value > 0));
-  refreshers.push(rangeRow(layers, 'repelStrength', state, 'repelStrength', 0, 8, 0.05, (v) => params.repelStrength.value = v, () => params.repelStrength.value));
+  refreshers.push(rangeRow(layers, 'repelStrength', state, 'repelStrength', 0, 40, 0.5, (v) => params.repelStrength.value = v, () => params.repelStrength.value));
   refreshers.push(checkRow(layers, '3 · Fricción (drag)', params.dragEnabled.value > 0, (v) => params.dragEnabled.value = v ? 1 : 0, () => params.dragEnabled.value > 0));
   refreshers.push(rangeRow(layers, 'dragCoefficient', state, 'dragCoefficient', 0, 1, 0.01, (v) => params.dragCoefficient.value = v, () => params.dragCoefficient.value));
   refreshers.push(checkRow(layers, '4 · Gravedad', params.gravityEnabled.value > 0, (v) => params.gravityEnabled.value = v ? 1 : 0, () => params.gravityEnabled.value > 0));

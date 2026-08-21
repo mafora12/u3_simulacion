@@ -153,24 +153,36 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
       const distance = max(toAttractor.length(), params.softening);
       const radialDirection = toAttractor.div(distance);
 
-      // 1) ATRACCIÓN: hacia el atractor, con la ley del inverso del cuadrado.
+      // 1) ATRACCIÓN: hacia el atractor, con caída INVERSA A LA DISTANCIA (1/d).
+      //
+      // No es el inverso del cuadrado, y es una decisión deliberada de escala.
+      // El mundo mide `boundsSize` = 10 unidades, así que las distancias de
+      // trabajo típicas son de 2 a 5. Con 1/d² la fuerza a d=3 valía 0.24 y a
+      // d=5 apenas 0.09: prácticamente nula fuera de un radio de 2 unidades.
+      // El resultado era que el atractor "no se veía" y que la gravedad (1.2,
+      // constante en todo el espacio) la aplastaba por un factor de 5 a 14.
+      // Con 1/d la fuerza mantiene alcance largo y el gesto de conducir el
+      // atractor con el puntero se lee a simple vista en todo el encuadre.
       force.addAssign(
         radialDirection
           .mul(params.attractStrength)
-          .div(distance.pow(2))
+          .div(distance)
           .mul(params.attractEnabled)
           .mul(params.intensity)
       );
 
-      // 2) REPULSIÓN: misma dirección, signo contrario, y caída con el CUBO de
-      // la distancia. El exponente distinto es lo que impide que atracción y
-      // repulsión sean la misma fuerza con el signo cambiado: la repulsión
-      // domina de cerca y la atracción de lejos, así que encendidas a la vez
-      // hay un radio de equilibrio y las partículas forman una cáscara.
+      // 2) REPULSIÓN: misma dirección, signo contrario, y caída con el CUADRADO
+      // de la distancia — es decir, SIEMPRE un exponente más que la atracción.
+      // Ahí está la clave del diseño: al caer más deprisa, la repulsión domina
+      // de cerca y la atracción de lejos, así que encendidas a la vez existe un
+      // radio de equilibrio y las partículas forman una cáscara en vez de
+      // anularse. Igualando k_a/d = k_r/d² sale d_eq = k_r / k_a, la misma
+      // relación que con el par (2,3) anterior: subir la escala no rompió la
+      // predicción, solo le dio alcance.
       force.addAssign(
         radialDirection
           .mul(params.repelStrength)
-          .div(distance.pow(3))
+          .div(distance.pow(2))
           .mul(params.repelEnabled)
           .mul(params.intensity)
           .mul(-1.0)

@@ -361,6 +361,112 @@ produce una caída perpetua que no vuelve sola a ningún sitio.
 La última fila es la que protege la prueba de Inercia: el frenado se aplica donde se pidió
 y en ningún otro sitio.
 
+## Calibración de escala: hacer evidentes atracción y repulsión
+
+**Qué se pidió.** Que las fuerzas 1 y 2 atraigan y repelan de forma **evidente** hacia
+donde está el cursor —«no se está viendo casi»— y que **funcionen con la gravedad
+encendida**, porque con ella activa ninguna de las dos hacía nada.
+
+**Los dos síntomas eran el mismo problema: escala.** Las leyes originales eran
+`k_a/d²` (atracción, `k_a = 2.2`) y `k_r/d³` (repulsión, `k_r = 2.0`). En un mundo de
+`boundsSize = 10`, las distancias de trabajo van de 2 a 5 unidades, y ahí el inverso del
+cuadrado ya no vale casi nada:
+
+| distancia | atracción `2.2/d²` | gravedad (constante) | resultado |
+|---|---|---|---|
+| d = 2 | 0.55 | 1.2 | gravedad **2.2×** más fuerte |
+| d = 3 | 0.24 | 1.2 | gravedad **4.9×** más fuerte |
+| d = 5 | 0.09 | 1.2 | gravedad **13.6×** más fuerte |
+
+La fuerza era despreciable más allá de un radio de ~2 unidades. Por eso «no se veía casi»
+y por eso la gravedad —que es constante en todo el espacio— la borraba por completo. No
+era un bug de lógica: el interruptor funcionaba y la dirección era correcta. Era que la
+**magnitud a la distancia real de uso** estaba uno o dos órdenes por debajo de lo
+necesario.
+
+**Corrección 1 — cambio de las leyes de caída.** Se bajó un exponente a cada una:
+
+| | Antes | Ahora |
+|---|---|---|
+| Atracción | `k_a / d²` | **`k_a / d`** |
+| Repulsión | `k_r / d³` | **`k_r / d²`** |
+
+Lo esencial es que **la repulsión conserva un exponente más que la atracción**, que es la
+condición que hace existir la cáscara. Igualando `k_a/d = k_r/d²` sale `d_eq = k_r / k_a`:
+**la misma relación** que con el par anterior. El cambio da alcance sin romper el modelo.
+
+**Corrección 2 — recalibrado de magnitudes.**
+
+| Parámetro | Antes | Ahora | Razón |
+|---|---|---|---|
+| `attractStrength` | 2.2 | **6.0** | A d=3 vale 2.0, por encima de la gravedad (1.2) |
+| `repelStrength` | 2.0 | **18.0** | Ver abajo |
+| `d_eq` resultante | 0.909 | **3.0** | Esfera amplia y legible en vez de un nudo diminuto |
+
+El valor alto de `repelStrength` no es arbitrario, es la consecuencia inevitable del
+diseño: como la repulsión **debe** caer más deprisa para que la cáscara exista, a la
+distancia de trabajo es siempre la más débil de las dos. Una primera pasada con
+`repelStrength = 5.5` mejoró la repulsión aislada (+0.259 frente a +0.068) pero **seguía
+perdiendo contra la gravedad**: repulsión + gravedad daba −0.076, es decir, las partículas
+seguían acercándose. Subirla a 18 fue lo que resolvió el síntoma reportado.
+
+**Corrección 3 — el marcador del atractor ahora se ve en PERFORMANCE.** Parte de «no se
+ve» no era física sino de lectura: el marcador estaba oculto en PERFORMANCE, así que no
+había forma de saber **hacia dónde** tiraban las fuerzas. Se veía a las partículas
+moverse, pero no hacia qué. Ahora:
+
+- Aparece en PERFORMANCE mientras atracción o repulsión estén activas.
+- **Cambia de color** según cuál manda: azul frío `#7fd4ff` para atracción, naranja cálido
+  `#ff9a5a` para repulsión, blanco en reposo.
+- Sigue ocultándose mientras dibujas, porque ahí el puntero es pincel y no atractor.
+- La regla depende de cuatro cosas que cambian por caminos distintos (modo, modo dibujo y
+  los dos interruptores radiales). En vez de repetirla en cada sitio —que es como se
+  desincronizan— se resuelve en **un único lugar, una vez por frame**, desde el bucle de
+  render (`updateAttractorHelper`). Se eliminaron las asignaciones duplicadas que había en
+  `setMode` y `setDrawMode`.
+
+**Cómo se verificó.** Desplazamiento de la distancia media al atractor, 60 pasos, misma
+figura y mismo atractor:
+
+| Escenario | Antes | Ahora |
+|---|---|---|
+| Atracción sola | −0.185 | **−0.984** (5.3× más) |
+| Repulsión sola | +0.068 | **+0.794** (11.7× más) |
+| Gravedad sola (referencia) | −0.343 | −0.343 |
+| **Atracción + gravedad** | apenas distinguible de gravedad sola | **−1.344** (frente a −0.343: la atracción manda) |
+| **Repulsión + gravedad** | **−0.076** (la gravedad ganaba) | **+0.473** (la repulsión manda) |
+
+Las dos filas en negrita son exactamente el síntoma reportado, ahora resuelto: con la
+gravedad encendida, la atracción acerca cuatro veces más que la gravedad sola, y la
+repulsión **invierte el signo** del desplazamiento.
+
+**La predicción del radio de equilibrio sobrevivió al cambio de leyes**, que es la mejor
+señal de que el modelo estaba bien entendido y no ajustado a ojo:
+
+| `k_a` | `k_r` | `d_eq` predicho | Mediana observada | Banda p10–p90 |
+|---|---|---|---|---|
+| 6.0 | 18.0 | **3.000** | **3.000** | 3.000 – 3.000 |
+| 6.0 | 30.0 | **5.000** | **5.000** | 5.000 – 5.000 |
+| 12.0 | 18.0 | **1.500** | **1.500** | 1.500 – 1.500 |
+
+Partiendo de una mediana de ≈3.42 con la figura dispersa, la nube converge al radio
+predicho con p10 y p90 idénticos a tres decimales.
+
+**Verificación del marcador**, en los siete estados que puede tomar:
+
+| Estado | Visible | Color |
+|---|---|---|
+| LAB, sin fuerzas | sí | blanco |
+| LAB, dibujando | **no** | — |
+| PERFORMANCE, sin radiales | **no** | — |
+| PERFORMANCE + atracción | sí | azul `#7fd4ff` |
+| PERFORMANCE + repulsión | sí | naranja `#ff9a5a` |
+| PERFORMANCE, apagadas | **no** | — |
+| PERFORMANCE + tecla 5 | sí | naranja (de cerca manda la repulsión) |
+
+**Rangos del panel ampliados** para que los nuevos valores sean alcanzables:
+`attractStrength` 0–20 (antes 0–8) y `repelStrength` 0–40 (antes 0–8).
+
 ## Controles
 
 | Tecla | Acción |
