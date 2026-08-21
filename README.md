@@ -59,6 +59,12 @@ GPU Compute + Vite `8.2.1` + publicación automática por GitHub Actions
 El instrumento **arranca vacío**: cero partículas y ninguna fuerza activa. Ese es el
 estado inicial real, no una nube de arranque.
 
+**Límite de partículas: 65 536** (2^16 = 256 tramos de pincel). Es un límite duro, no una
+sugerencia: el buffer de la GPU se reserva con ese tamaño exacto y el pincel escribe en un
+**anillo**, así que al llegar al tope los tramos más antiguos ceden su sitio a los nuevos.
+Por mucho que sigas dibujando nunca hay más. El HUD lo muestra en vivo
+(`partículas 12.800 / 65.536 (20%)`).
+
 ### Flujo de uso
 
 1. `D` → traza una figura con el puntero. Es la **condición inicial**: define dónde nacen
@@ -112,9 +118,9 @@ Todo el estado físico vive en la GPU, en tres *storage buffers* creados con
 
 | Buffer | Tipo | Qué guarda | Dónde |
 |---|---|---|---|
-| `positionBuffer` | `vec3` × 131 072 | Posición de cada partícula | [`createSimulation.js:41`](src/simulation/createSimulation.js#L41) |
-| `velocityBuffer` | `vec3` × 131 072 | Velocidad de cada partícula | [`createSimulation.js:42`](src/simulation/createSimulation.js#L42) |
-| `aliveBuffer` | `float` × 131 072 | `1.0` si la ranura contiene partícula, `0.0` si está vacía | [`createSimulation.js:43`](src/simulation/createSimulation.js#L43) |
+| `positionBuffer` | `vec3` × 65 536 | Posición de cada partícula | [`createSimulation.js:41`](src/simulation/createSimulation.js#L41) |
+| `velocityBuffer` | `vec3` × 65 536 | Velocidad de cada partícula | [`createSimulation.js:42`](src/simulation/createSimulation.js#L42) |
+| `aliveBuffer` | `float` × 65 536 | `1.0` si la ranura contiene partícula, `0.0` si está vacía | [`createSimulation.js:43`](src/simulation/createSimulation.js#L43) |
 
 `aliveBuffer` es el añadido que hace posible «cero partículas»: un `instancedArray` se
 reserva con tamaño fijo y no se redimensiona en caliente, así que lo que crece al dibujar
@@ -158,7 +164,7 @@ semi-implícito** con masa unitaria (`a = F`):
 v ← v + F·dt          dt = params.dt × timeScale
 v ← clamp(v, maxSpeed)     (limita la velocidad, evita explosiones numéricas)
 p ← p + v·dt
-p ← wrap(p, boundsSize)    (condiciones de contorno periódicas)
+                           (sin wrap: el contorno es una fuerza, ver abajo)
 ```
 
 Se actualiza **primero la velocidad y después la posición** (semi-implícito, no explícito):
@@ -169,7 +175,7 @@ es más estable para fuerzas centrales y no gana energía artificialmente en ór
 [`createSimulation.js:224-257`](src/simulation/createSimulation.js#L224). El render **no
 recalcula física**: consume el estado de la GPU.
 
-- `SpriteNodeMaterial` con `AdditiveBlending`, `InstancedMesh` de 131 072 instancias.
+- `SpriteNodeMaterial` con `AdditiveBlending`, `InstancedMesh` de 65 536 instancias.
 - `positionNode` ← `positionBuffer` como atributo.
 - `scaleNode` ← `particleSize × alive` (una ranura vacía degenera el quad y no rasteriza).
 - `colorNode` ← interpola azul `#46a6ff` → naranja `#ffb35a` según `speed / maxSpeed`:
@@ -296,9 +302,37 @@ F_g = (0, −1, 0) · g  ·  gravityEnabled · I
 - **Dirección:** `−Y` constante, **igual en todo el espacio**.
 - **Predicción:** la `y` media baja; el efecto **no cambia** si muevo el atractor. Ese es
   el test que la distingue de la atracción.
-- **Decisión de diseño:** con las condiciones de contorno periódicas, las partículas caen,
-  salen por abajo y reentran por arriba. Combinada con fricción alcanzan velocidad
-  terminal, que es la combinación más estable para sostener un tramo largo.
+- **Decisión de diseño:** las partículas caen hasta que la contención las frena por abajo.
+  Combinada con fricción alcanzan velocidad terminal, que es la combinación más estable
+  para sostener un tramo largo.
+
+### Contorno · contención suave (sin tecla)
+
+```
+F_c = − p̂ · k_c · max(‖p‖ − R, 0)   −   v · c_c · gate(‖p‖ > R)
+```
+
+| Parámetro | Uniform | Defecto |
+|---|---|---|
+| `R` | `containRadius` | `4.5` |
+| `k_c` | `containStrength` | `28.0` |
+| `c_c` | `containDamping` | `4.0` |
+
+No es una capa expresiva —no tiene tecla ni se escala por `intensity`— sino la **condición
+de contorno**. Dentro de `R` la fuerza es exactamente cero y las partículas se mueven
+libres; fuera, un muelle tira de vuelta al centro y una amortiguación disipa la energía.
+
+- **Por qué reemplazó al wrap periódico.** El contorno anterior era cúbico: la partícula
+  que salía por una cara reaparecía en la opuesta. Eso **dibujaba literalmente un cubo en
+  pantalla** —se veía a las partículas cortarse en un plano y reaparecer al otro lado—.
+  Con el muelle no hay teletransporte, no hay corte y no hay ninguna cara visible.
+- **Por qué lleva amortiguación.** Un muelle solo es conservativo: devuelve toda la energía
+  que absorbe, así que una partícula que llega lanzada rebota igual de lejos y el borde
+  resuena. Con `R = 6.5` y sin amortiguar, medido, las partículas alcanzaban **radio 8.87**
+  bajo gravedad fuerte, muy por encima del cuadro visible.
+- **Por qué `R = 4.5`.** Está calibrado contra el encuadre, no elegido a ojo: con la cámara
+  en `z = 11` y fov 50°, el plano `z = 0` se ve hasta **±5.13** en vertical. 4.5 deja margen
+  para que ni el rebote más violento saque las partículas de cuadro.
 
 ### Macros globales
 
@@ -362,7 +396,7 @@ antes de cada prueba, con el atractor fijado y fuera de la figura.
 | 5 | **Gravedad** sola | La `y` media baja | **1.539 → 0.929** en 60 pasos | ✅ |
 
 La prueba de **Reposo** es la que separa este instrumento de una animación: `1.97 × 10⁻⁷`
-son unos pocos ULP de `float32`, ruido del `mod` del wrap, no movimiento. Si la figura se
+son unos pocos ULP de `float32`, ruido de coma flotante, no movimiento. Si la figura se
 moviera sin fuerzas, algo estaría empujando posiciones fuera del modelo de fuerzas — que
 es justo lo que el encargo prohíbe.
 

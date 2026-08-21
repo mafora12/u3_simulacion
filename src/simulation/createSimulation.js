@@ -9,7 +9,6 @@ import {
   instancedArray,
   max,
   mix,
-  mod,
   step,
   uint,
   uv,
@@ -156,13 +155,13 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
       // 1) ATRACCIÓN: hacia el atractor, con caída INVERSA A LA DISTANCIA (1/d).
       //
       // No es el inverso del cuadrado, y es una decisión deliberada de escala.
-      // El mundo mide `boundsSize` = 10 unidades, así que las distancias de
-      // trabajo típicas son de 2 a 5. Con 1/d² la fuerza a d=3 valía 0.24 y a
-      // d=5 apenas 0.09: prácticamente nula fuera de un radio de 2 unidades.
-      // El resultado era que el atractor "no se veía" y que la gravedad (1.2,
-      // constante en todo el espacio) la aplastaba por un factor de 5 a 14.
-      // Con 1/d la fuerza mantiene alcance largo y el gesto de conducir el
-      // atractor con el puntero se lee a simple vista en todo el encuadre.
+      // Las partículas viven dentro de `containRadius` (4.5), así que las
+      // distancias de trabajo van de 0.5 a 4.5. Con 1/d² la fuerza a d=3 valía
+      // 0.24 y a d=4.5 apenas 0.11: prácticamente nula fuera de un radio de 2
+      // unidades. El resultado era que el atractor "no se veía" y que la
+      // gravedad (1.2, constante en todo el espacio) la aplastaba por un factor
+      // de 5 a 14. Con 1/d la fuerza mantiene alcance largo —2.0 a d=3, 1.33 a
+      // d=4.5— y el gesto de conducir el atractor se lee en todo el encuadre.
       force.addAssign(
         radialDirection
           .mul(params.attractStrength)
@@ -195,14 +194,47 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
 
       // 4) GRAVEDAD: campo uniforme hacia -Y, igual en todo el espacio. A
       // diferencia de la atracción no depende de dónde esté el atractor ni de
-      // la distancia; por eso con las condiciones de contorno periódicas las
-      // partículas caen, salen por abajo y vuelven a entrar por arriba.
+      // la distancia.
       force.addAssign(
         vec3(0.0, -1.0, 0.0)
           .mul(params.gravityStrength)
           .mul(params.gravityEnabled)
           .mul(params.intensity)
       );
+
+      // CONTENCIÓN SUAVE ---------------------------------------------------
+      // No es una capa expresiva: es la condición de contorno, y por eso no
+      // tiene interruptor ni se escala por `intensity`.
+      //
+      // Antes el contorno era un WRAP PERIÓDICO cúbico: la partícula que salía
+      // por una cara reaparecía en la opuesta. Eso dibujaba literalmente un
+      // cubo en pantalla —se veía a las partículas cortarse en un plano y
+      // reaparecer al otro lado— y ese corte es el «cubo delimitador» que no
+      // queríamos ver.
+      //
+      // Ahora el contorno es un muelle esférico que SOLO actúa fuera de
+      // `containRadius`: dentro la fuerza es exactamente cero y las partículas
+      // se mueven libres; fuera, tira de vuelta al centro con una fuerza
+      // proporcional a lo lejos que se hayan ido. No hay teletransporte, no hay
+      // corte y no hay ninguna cara visible: solo dejan de alejarse y vuelven.
+      //
+      // `max(..., 0)` es lo que hace que sea gratis por dentro, sin ramas.
+      const fromCenter = p.length();
+      const overshoot = max(fromCenter.sub(params.containRadius), 0.0);
+      force.addAssign(
+        p.div(max(fromCenter, 0.0001))     // dirección hacia fuera, normalizada
+          .mul(overshoot)
+          .mul(params.containStrength)
+          .mul(-1.0)                        // ...y se aplica hacia dentro
+      );
+
+      // Amortiguación del contorno. El muelle por sí solo es conservativo:
+      // devuelve toda la energía que absorbe, así que una partícula que llega
+      // lanzada rebota igual de lejos y el borde resuena. Esto disipa esa
+      // energía, y solo fuera del radio: la puerta pasa de 0 a 1 en el primer
+      // cuarto de unidad, de forma continua, para que no haya un escalón.
+      const outsideGate = overshoot.mul(4.0).clamp(0.0, 1.0);
+      force.addAssign(v.mul(params.containDamping).mul(outsideGate).mul(-1.0));
 
       // INTEGRATION -------------------------------------------------------
       // Unit mass: a = F. Semi-implicit Euler: update v, then p.
@@ -214,10 +246,6 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
       });
 
       p.addAssign(v.mul(dt));
-
-      // Periodic boundary conditions: particles leaving one side re-enter.
-      const half = params.boundsSize.mul(0.5);
-      p.assign(mod(p.add(half), params.boundsSize).sub(half));
     });
   })().compute(count).setName('Update Particles');
 

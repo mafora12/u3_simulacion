@@ -8,7 +8,20 @@ import { createSimulation } from './simulation/createSimulation.js';
 import { createLabPanel } from './ui/labPanel.js';
 import { createOscilloscope } from './ui/oscilloscope.js';
 
-const PARTICLE_COUNT = 131072; // 2^17. Increase only after measuring performance.
+// LÍMITE DE PARTÍCULAS ----------------------------------------------------
+// Es un límite duro, no una sugerencia: el buffer de la GPU se reserva con
+// este tamaño exacto y el pincel escribe en un ANILLO, así que al llegar al
+// tope los tramos más antiguos ceden su sitio a los nuevos. Nunca hay más de
+// PARTICLE_COUNT vivas, por mucho que sigas dibujando.
+//
+// Antes eran 131072 (2^17). El número existía pero era tan alto que en la
+// práctica no se percibía ningún límite: se podía dibujar indefinidamente y la
+// figura seguía acumulando. Con 65536 el tope se alcanza en 256 tramos, que es
+// una figura larga pero acotada, y el contador del HUD lo hace explícito.
+//
+// Debe ser múltiplo de STAMP_SIZE para que el anillo nunca parta un tramo en
+// dos (ver la comprobación en createSimulation).
+const PARTICLE_COUNT = 65536; // 2^16 = 256 tramos de 256 partículas.
 
 // PINCEL: constantes del trazo -------------------------------------------
 // El pincel no coloca partículas de una en una: cada movimiento del puntero
@@ -125,9 +138,28 @@ async function main() {
   const axes = new THREE.AxesHelper(1.5);
   scene.add(axes);
 
+  // El HUD tiene dos partes separadas a propósito. La leyenda de teclas solo
+  // cambia cuando cambia un modo, y se reescribe con innerHTML. El contador de
+  // partículas cambia constantemente mientras dibujas, así que vive en su
+  // propio nodo y se actualiza con textContent: reescribir todo el innerHTML
+  // en cada frame para mover un número sería tirar trabajo a la basura.
   const hud = document.createElement('div');
   hud.className = 'hud';
+  const hudKeys = document.createElement('div');
+  const hudMeter = document.createElement('div');
+  hudMeter.className = 'hud-meter';
+  hud.append(hudKeys, hudMeter);
   document.body.append(hud);
+
+  let shownAlive = -1;
+  function updateParticleMeter() {
+    const alive = simulation.getAliveCount();
+    if (alive === shownAlive) return;   // nada que redibujar
+    shownAlive = alive;
+    const pct = Math.round((alive / PARTICLE_COUNT) * 100);
+    hudMeter.textContent =
+      `partículas ${alive.toLocaleString('es')} / ${PARTICLE_COUNT.toLocaleString('es')} (${pct}%)`;
+  }
 
   // PUNTERO -> POSICIÓN EN EL MUNDO ---------------------------------------
   // El puntero vive en 2D (píxeles de pantalla) y la simulación en 3D, así que
@@ -204,7 +236,7 @@ async function main() {
     const draw = drawMode
       ? '<strong>DIBUJO</strong>: arrastra para trazar · D: salir'
       : 'D: dibujar figura · <strong>arrastra</strong> para llevar el punto de fuerza';
-    hud.innerHTML = mode === 'LAB'
+    hudKeys.innerHTML = mode === 'LAB'
       ? `<strong>LAB</strong> · ${draw} · 1–4: aislar fuerza · 0: restaurar figura · R: reset (cero partículas) · P: performance · botón derecho: orbitar`
       : `<strong>PERFORMANCE</strong> · ${draw} · 1–4: fuerzas dentro/fuera · 5: todas · 0: restaurar figura · espacio: invertir radial · rueda: intensidad
          <br>${layerStatusLine()}`;
@@ -343,16 +375,16 @@ async function main() {
   // botón izquierdo y se queda donde lo dejes. La órbita se movió al botón
   // derecho (ver `orbit.mouseButtons`), así que los dos gestos ya no compiten.
 
-  // El punto solo tiene sentido DENTRO del volumen simulado. El encuadre es más
-  // ancho que el mundo (los bordes de pantalla caían en x ≈ ±7.7 con el mundo
-  // acabado en ±5), así que fuera de la caja las partículas eran atraídas hacia
-  // un punto al otro lado de la pared periódica y el resultado no se leía como
-  // atracción sino como fuga. Acotarlo mantiene el gesto siempre legible.
-  const attractorLimit = params.boundsSize.value * 0.5 - 0.2;
+  // El punto solo tiene sentido dentro de la zona donde las partículas pueden
+  // estar. El encuadre es más ancho que esa zona (los bordes de pantalla caen
+  // en x ≈ ±7.7), así que sin acotarlo se podía arrastrar el atractor a un sitio
+  // al que la contención no deja llegar a ninguna partícula: tiraba de ellas
+  // hacia fuera y se quedaban amontonadas contra el borde, sin alcanzarlo nunca.
+  // Se acota al radio de contención, que es exactamente hasta dónde llega el
+  // mundo habitable.
+  const attractorLimit = params.containRadius.value;
   const clampToBounds = (v) => {
-    v.x = Math.min(attractorLimit, Math.max(-attractorLimit, v.x));
-    v.y = Math.min(attractorLimit, Math.max(-attractorLimit, v.y));
-    v.z = Math.min(attractorLimit, Math.max(-attractorLimit, v.z));
+    if (v.length() > attractorLimit) v.setLength(attractorLimit);
     return v;
   };
 
@@ -692,6 +724,7 @@ async function main() {
   renderer.setAnimationLoop(() => {
     if (!paused) simulation.stepSimulation();
     updateAttractorHelper();
+    updateParticleMeter();
     orbit.update();
     renderer.render(scene, camera);
     scope.draw(params.maxSpeed.value);

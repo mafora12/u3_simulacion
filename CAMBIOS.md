@@ -542,6 +542,106 @@ del navegador oculto, ese valor era de un frame anterior y no probaba nada. Se r
 exponiendo `updateAttractorHelper()` y forzando el recálculo. Leer un estado que nadie ha
 actualizado es una forma fácil de creer que algo se verificó.
 
+## Fuera el cubo delimitador, y un límite de partículas visible
+
+**Qué se pidió.** Dos cosas: «ya no hay un límite de partículas, dame un límite de ellas»
+y «se ve el cubo delimitador, quita ese cubo y déjalas libres por el espacio de la
+pantalla».
+
+### El cubo no era un objeto: era el contorno periódico
+
+No había ninguna malla de cubo en la escena. Lo que se veía era el **wrap periódico**: la
+partícula que salía por una cara del volumen reaparecía instantáneamente en la opuesta
+(`p = mod(p + half, boundsSize) − half`). Ese teletransporte produce un corte nítido en un
+plano —las partículas se siegan en una línea recta y reaparecen enfrente— y el ojo lee
+seis planos así como un cubo.
+
+**Corrección: el contorno pasa de ser una regla de teletransporte a ser una fuerza.** Un
+muelle esférico que **solo actúa fuera de `containRadius`**:
+
+```
+F_c = − p̂ · k_c · max(‖p‖ − R, 0)   −   v · c_c · gate(‖p‖ > R)
+```
+
+Dentro del radio la fuerza es exactamente cero —las partículas se mueven libres, sin pared
+ni cara visible—; fuera, tira de vuelta con fuerza proporcional a lo lejos que se hayan
+ido. El `max(..., 0)` es lo que lo hace gratis por dentro y sin ramas. Se eliminó el
+`mod` del shader (y su import, que quedó sin uso).
+
+**La amortiguación no fue un adorno: la primera versión no servía.** Con solo el muelle
+(`R = 6.5`, `k_c = 6`), medido bajo gravedad fuerte:
+
+| | radio máx. | fuera de cuadro (vertical) | esquinas de cubo |
+|---|---|---|---|
+| Solo muelle, `R = 6.5`, `k = 6` | **8.87** | sí | 0 |
+
+El cubo había desaparecido, pero un muelle sin amortiguar es **conservativo**: devuelve
+toda la energía que absorbe, así que una partícula que llega lanzada rebota igual de lejos
+y el borde resuena. Con la cámara en `z = 11` y fov 50°, el plano `z = 0` solo se ve hasta
+**±5.13** en vertical: a radio 8.87 se salían de cuadro, que es justo lo contrario de
+«libres por el espacio de la pantalla».
+
+Se añadió amortiguación que actúa solo fuera del radio (con una puerta continua que sube
+de 0 a 1 en el primer cuarto de unidad, para que no haya escalón) y se recalibró el radio
+**contra el encuadre**, no a ojo: `R = 4.5`, `k_c = 28`, `c_c = 4`.
+
+| Momento (gravedad 2.0, nube completa) | radio máx. | radio p99 | fuera de cuadro | esquinas de cubo |
+|---|---|---|---|---|
+| Inicio | 3.79 | 3.41 | 0 | 0 |
+| 300 pasos | **4.78** | 4.78 | **0** | **0** |
+| 900 pasos | 4.57 | 4.57 | **0** | **0** |
+| 1800 pasos | 4.57 | 4.57 | **0** | **0** |
+
+Estable, dentro del cuadro visible (±5.13) y sin una sola esquina de cubo en ningún
+momento.
+
+Como consecuencia, `boundsSize` deja de definir el contorno: ahora solo fija cuánto se
+dispersa la nube de prueba. Y el punto de fuerza pasa a acotarse a `containRadius` en vez
+de a la vieja caja, porque ese es exactamente el mundo habitable: arrastrarlo más allá
+tiraba de las partículas hacia un sitio al que no pueden llegar, y se quedaban amontonadas
+contra el borde sin alcanzarlo nunca.
+
+### El límite de partículas existía, pero no se percibía
+
+El tope era de **131 072** (2^17). El anillo del pincel ya garantizaba que nunca hubiera
+más: al llegar al final, los tramos más antiguos ceden su sitio. Pero el número era tan
+alto que en la práctica se podía dibujar indefinidamente sin encontrarlo.
+
+**Corrección.** El límite baja a **65 536** (2^16 = 256 tramos de 256 partículas, múltiplo
+de `STAMP_SIZE` como exige el anillo) y —más importante— **se hace visible**: el HUD
+muestra el consumo en vivo.
+
+El contador vive en su propio nodo del HUD, aparte de la leyenda de teclas. La leyenda solo
+cambia al cambiar de modo y se reescribe con `innerHTML`; el contador cambia constantemente
+mientras dibujas y se actualiza con `textContent`, y solo cuando el número cambia.
+Reescribir todo el `innerHTML` en cada frame para mover un dígito sería tirar trabajo a la
+basura.
+
+**Verificación del límite** — 900 tramos, 3.5 veces la capacidad del anillo:
+
+| Tramos dibujados | Partículas vivas | Figura recordada |
+|---|---|---|
+| 50 | 12 800 | 50 |
+| 128 | 32 768 | 128 |
+| 256 | **65 536** | 256 |
+| 300 | **65 536** | 256 |
+| 500 | **65 536** | 256 |
+| 900 | **65 536** | 256 |
+
+Nunca lo supera. La lista de la figura en CPU se recorta por el mismo extremo por el que el
+anillo sobrescribe, así que lo que recuerda la CPU y lo que contiene la GPU siguen
+coincidiendo.
+
+**Verificación del contador**, en los cinco estados que puede mostrar:
+
+| Estado | Texto |
+|---|---|
+| Vacío | `partículas 0 / 65.536 (0%)` |
+| 40 tramos | `partículas 10.240 / 65.536 (16%)` |
+| Tope alcanzado | `partículas 65.536 / 65.536 (100%)` |
+| Nube sembrada | `partículas 65.536 / 65.536 (100%)` |
+| Tras reset | `partículas 0 / 65.536 (0%)` |
+
 ## Controles
 
 | Tecla | Acción |
