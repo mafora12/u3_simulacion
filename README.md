@@ -454,10 +454,10 @@ fuerzas**. Estos son los gestos que el instrumento sabe ejecutar:
 
 | Tramo | Tiempo | Qué escucho | Intención | Gesto / controles | Comportamiento esperado |
 |---|---|---|---|---|---|
-| A — Entrada | `[ 0:00 – ? ]` | | | | |
-| B — | `[ ? ]` | | | | |
-| C — | `[ ? ]` | | | | |
-| D — | `[ ? ]` | | | | |
+| A — Entrada | `[ 0:00 – 0:05 ]` | | | | |
+| B — | `[ 0:05 - 1:11 ]` | | | | |
+| C — | `[ 0:11 - 2:00 ]` | | | | |
+| D — | `[  ]` | | | | |
 | E — Cierre | `[ ? – fin ]` | | | | |
 
 ### Tramo de ejemplo (nivel de detalle esperado)
@@ -481,9 +481,6 @@ FFT. El único mecanismo de control soy yo decidiendo qué tecla pulsar y cuánd
 
 ## 6. Bitácora de IA
 
-Uso de IA generativa (Claude) sobre el caso de estudio `forces-instrument-u3`, con ciclo
-de **especificación → verificación → modificación**. Registro de qué acepté, qué corregí y
-qué descarté.
 
 ### Ciclo 1 — Dibujar la condición inicial
 
@@ -579,12 +576,6 @@ fuerza deja de acelerar, pero no borra la velocidad acumulada.
 ---
 
 ## 7. Autoevaluación ponderada
-
-> **⚠️ Las valoraciones son propuestas, no definitivas.** Están calculadas contra la
-> evidencia que existe hoy en el repositorio. Debo confirmarlas o ajustarlas antes de
-> entregar, porque el criterio real es **si puedo sostenerlas en la sustentación**: aislar,
-> predecir, probar y modificar una fuerza en vivo. La nota de Score refleja que §5 está
-> pendiente.
 
 | Criterio | Peso | Evidencia concreta | Valoración |
 |---|---:|---|---:|
