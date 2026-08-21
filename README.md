@@ -50,7 +50,7 @@ GPU Compute + Vite `8.2.1` + publicación automática por GitHub Actions
 | Para qué | Comprender y verificar | Interpretar en vivo |
 | Panel | Visible (sliders, casillas, pruebas) | Oculto |
 | Ejes | Visibles | Ocultos |
-| Marcador del atractor | Siempre visible (blanco) | Visible **solo si atracción o repulsión están activas**, y coloreado según cuál manda |
+| Marcador del punto de fuerza | Siempre visible (blanco) | Visible si atracción o repulsión están activas —o mientras lo arrastras— y coloreado según cuál manda |
 | Órbita de cámara | Activa | Bloqueada |
 | Teclas `1`–`4` | **Aíslan** una fuerza y restauran la figura | **Meten o sacan** la fuerza de la mezcla, sin cortar el sistema |
 | Tecla `5` | Preset de las cuatro juntas | Enciende/apaga todas |
@@ -64,8 +64,8 @@ estado inicial real, no una nube de arranque.
 1. `D` → traza una figura con el puntero. Es la **condición inicial**: define dónde nacen
    las partículas, no por dónde deben pasar. Nacen quietas.
 2. `D` otra vez → sales del modo dibujo y recuperas la órbita.
-3. `P` → PERFORMANCE. Conduces las fuerzas con `1`–`5`, el atractor con el puntero, la
-   intensidad con la rueda y la inversión radial con el espacio.
+3. `P` → PERFORMANCE. Conduces las fuerzas con `1`–`5`, **arrastras el punto de fuerza**
+   con el botón izquierdo, la intensidad con la rueda y la inversión radial con el espacio.
 
 ### Controles
 
@@ -82,9 +82,10 @@ estado inicial real, no una nube de arranque.
 | `R` | Reset: cero partículas, ninguna fuerza, figura olvidada. |
 | espacio | Mientras se mantiene pulsado, intercambia atracción y repulsión. |
 | rueda | Macro de intensidad (`0`–`2`). |
-| puntero | Dibuja (en modo dibujo) o conduce el atractor (fuera de él). |
+| **arrastrar (botón izq.)** | Dibuja (en modo dibujo) o **lleva el punto de fuerza** (fuera de él). El punto **se queda donde lo sueltas**. |
+| **botón derecho** | Orbita la cámara (solo LAB). |
 
-**Son nueve controles con función interpretativa**, no un panel de sliders. El panel
+**Son diez controles con función interpretativa**, no un panel de sliders. El panel
 completo existe solo en LAB, que es donde se verifica; en PERFORMANCE está oculto a
 propósito para que la conducción pase por gestos y no por ajustes finos.
 
@@ -180,7 +181,9 @@ recalcula física**: consume el estado de la GPU.
 | Responsabilidad | Dónde |
 |---|---|
 | Escena, cámara, renderer, loop | [`main.js:62-90`](src/main.js#L62), loop en [`:591`](src/main.js#L591) |
-| Proyección puntero → mundo (plano orientado a cámara) | [`main.js:126`](src/main.js#L126) |
+| Proyección puntero → mundo (plano orientado a cámara) | [`main.js:137`](src/main.js#L137) |
+| Arrastre del punto de fuerza (agarrar, acotar, soltar) | [`main.js:344-390`](src/main.js#L344) |
+| Separación de gestos: izq. instrumento / der. órbita | [`main.js:89`](src/main.js#L89) |
 | Pincel: emisión de tramos | [`main.js:218`](src/main.js#L218) |
 | Modo dibujo / modo LAB-PERFORMANCE | [`main.js:201`](src/main.js#L201), [`:213`](src/main.js#L213) |
 | Marcador del atractor (visibilidad y color) | [`main.js:229`](src/main.js#L229), resuelto una vez por frame |
@@ -445,7 +448,7 @@ fuerzas**. Estos son los gestos que el instrumento sabe ejecutar:
 | Estabilidad | `1` + `2` + `3` | La cáscara se asienta y deja de vibrar |
 | Ruptura | espacio (invertir) | Lo que atraía repele: estallido desde el centro |
 | Dispersión | `2` sola, rueda arriba | Expansión hacia los bordes |
-| Transición | mover el atractor con el puntero | El centro de gravedad del campo se desplaza |
+| Transición | arrastrar el punto de fuerza | El centro de gravedad del campo se desplaza a donde lo lleves |
 | Caída / peso | `4` gravedad | Descenso continuo, reentrada por arriba |
 | Suspensión | `4` + `3` | Velocidad terminal: caída sostenida y estable |
 | Detención | apagar `4` o `5` | **Frenado en seco**: la figura se queda donde está |

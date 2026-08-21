@@ -467,6 +467,81 @@ predicho con p10 y p90 idénticos a tres decimales.
 **Rangos del panel ampliados** para que los nuevos valores sean alcanzables:
 `attractStrength` 0–20 (antes 0–8) y `repelStrength` 0–40 (antes 0–8).
 
+## El punto de fuerza no se podía conducir con el puntero
+
+**Qué se pidió.** «No me deja guiar el punto de atracción o repulsión con el puntero del
+mouse, necesito controlar eso.»
+
+**Lo primero fue descartar lo obvio.** Medido en el navegador, el atractor **sí** seguía
+al puntero y la física **sí** obedecía: al colocarlo arriba a la izquierda, el centroide
+de la figura se acercó a él de 5.648 a 4.382 en 90 pasos. El uniform llegaba a la GPU sin
+problema. El fallo no estaba en el mecanismo sino en el **gesto**.
+
+**Causa 1 — el botón izquierdo hacía dos cosas a la vez y se estorbaban.** Al arrastrar
+en LAB, el atractor se movía *y la cámara orbitaba al mismo tiempo*:
+
+| Arrastrando a | Atractor | Cámara |
+|---|---|---|
+| (680, 370) | (0.57, −0.14) | (−0.19, 0.05, 11.00) |
+| (760, 390) | (1.70, −0.43) | (−1.11, 0.28, 10.94) |
+| (840, 410) | (2.75, −0.71) | (−2.66, 0.67, 10.65) |
+
+Y como el plano de trabajo se construye con la **dirección de la cámara** como normal
+—decisión correcta, y necesaria para dibujar con la vista orbitada—, girar la vista mueve
+la referencia sobre la que se proyecta el puntero. Es decir: el punto se recalculaba
+contra un sistema que se estaba moviendo debajo del propio gesto. Se iba solo mientras
+intentabas llevarlo.
+
+**Causa 2 — no se podía aparcar.** El atractor iba pegado al puntero en todo momento, sin
+pulsar nada. Cualquier movimiento de la mano —ir a pulsar una tecla, apartarse— arrastraba
+el punto de fuerza consigo. En una interpretación en vivo eso no es conducir: es no poder
+soltar.
+
+**Causa 3 — el punto podía salirse del mundo.** El encuadre es más ancho que el volumen
+simulado: los bordes de la pantalla caían en `x ≈ ±7.69` con el mundo terminando en `±5`.
+Fuera de la caja, las partículas eran atraídas hacia un punto al otro lado de la pared
+periódica, y el resultado no se leía como atracción sino como fuga.
+
+**Corrección.**
+
+- **Los dos gestos se separaron por botón.** El izquierdo queda para el instrumento
+  (dibujar la figura y arrastrar el punto de fuerza); la órbita pasa al **botón derecho**
+  vía `orbit.mouseButtons = { LEFT: null, MIDDLE: DOLLY, RIGHT: ROTATE }`. Orbitar es para
+  encuadrar antes de tocar, no mientras se toca.
+- **El atractor pasa a ser un objeto que se agarra y se suelta.** Se arrastra con el botón
+  izquierdo y **se queda donde lo dejes**. El cursor lo anuncia: `grab` en reposo,
+  `grabbing` mientras lo llevas.
+- **Se acota al volumen simulado** (`±boundsSize/2 − 0.2` = ±4.8), así que el gesto siempre
+  apunta a un sitio con sentido físico.
+- **El marcador se ve mientras lo arrastras**, aunque no haya ninguna fuerza radial
+  encendida: no se puede colocar a ciegas un punto que no se ve.
+- **Se suprime el menú contextual** en el canvas. OrbitControls ya lo hacía, pero solo
+  mientras está habilitado, y en PERFORMANCE está apagado: sin esto, un clic derecho en
+  mitad de la interpretación abriría el menú del navegador encima de la obra.
+
+**Cómo se verificó.**
+
+| Comprobación | Resultado |
+|---|---|
+| Puntero moviéndose **sin** botón | atractor **no** se mueve: queda aparcado en (0.00, 0.00) |
+| Arrastre izquierdo | atractor (−1.99, 0.57) → (0.85, −0.57) → (3.70, −1.71) |
+| Cámara durante ese arrastre | **(0.00, 0.00, 11.00) sin cambio** — ya no gira |
+| Cursor | `grab` → `grabbing` → `grab` |
+| Tras soltar y mover el puntero | sigue aparcado en (3.70, −1.71) |
+| Arrastre a la esquina de la pantalla | acotado a (−4.80, 4.80), dentro de la caja |
+| **Botón derecho** | cámara (0.00, 0.00, 11.00) → (−0.94, 0.33, 10.95) **sin mover el atractor** |
+| Menú contextual | `defaultPrevented = true` |
+| **Regresión: dibujo** | 2304 partículas selladas; el atractor no se movió al dibujar |
+| Marcador, PERFORMANCE sin fuerzas, sin arrastrar | oculto |
+| Marcador, PERFORMANCE sin fuerzas, **arrastrando** | **visible** |
+| Marcador, PERFORMANCE + atracción | visible, azul `#7fd4ff` |
+
+**Nota de método.** Una primera pasada dio por buena la visibilidad del marcador leyendo
+`attractorHelper.visible` sin recalcularlo: como el bucle de render no avanza con el panel
+del navegador oculto, ese valor era de un frame anterior y no probaba nada. Se repitió
+exponiendo `updateAttractorHelper()` y forzando el recálculo. Leer un estado que nadie ha
+actualizado es una forma fácil de creer que algo se verificó.
+
 ## Controles
 
 | Tecla | Acción |

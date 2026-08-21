@@ -80,6 +80,21 @@ async function main() {
   const orbit = new OrbitControls(camera, canvas);
   orbit.enableDamping = true;
   orbit.target.set(0, 0, 0);
+  // El botón IZQUIERDO queda libre para el instrumento —dibujar la figura y
+  // arrastrar el punto de fuerza—, que es lo que se conduce durante la pieza.
+  // La órbita pasa al derecho: se usa para encuadrar antes de tocar, no
+  // mientras se toca. Compartir el izquierdo era justo lo que impedía guiar el
+  // atractor: al arrastrarlo, la cámara giraba y el plano de trabajo se movía
+  // debajo del gesto.
+  orbit.mouseButtons = {
+    LEFT: null,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.ROTATE
+  };
+  // OrbitControls ya suprime el menú contextual, pero solo mientras está
+  // habilitado — y en PERFORMANCE está apagado. Sin esto, un clic derecho en
+  // mitad de la interpretación abriría el menú del navegador encima de la obra.
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
   const params = createParameters();
   const simulation = createSimulation({
@@ -151,6 +166,10 @@ async function main() {
   // Son estados distintos: puedes estar en modo dibujo sin estar trazando.
   let drawMode = false;
   let drawing = false;
+  // `guidingAttractor`: el botón izquierdo está pulsado y arrastrando el punto
+  // de fuerza. Se declara aquí, junto al resto del estado de interacción,
+  // porque el bucle de render lo consulta para mostrar el marcador.
+  let guidingAttractor = false;
   let panel;
   // ¿Está el campo radial invertido ahora mismo por tener el espacio pulsado?
   // Hace falta recordarlo para deshacer el intercambio exactamente una vez al
@@ -184,10 +203,10 @@ async function main() {
   function updateHud() {
     const draw = drawMode
       ? '<strong>DIBUJO</strong>: arrastra para trazar · D: salir'
-      : 'D: dibujar figura';
+      : 'D: dibujar figura · <strong>arrastra</strong> para llevar el punto de fuerza';
     hud.innerHTML = mode === 'LAB'
-      ? `<strong>LAB</strong> · ${draw} · 1–4: aislar capa · 0: restaurar figura · R: reset (cero partículas) · P: performance`
-      : `<strong>PERFORMANCE</strong> · ${draw} · 1–4: capas dentro/fuera · 5: todas · 0: restaurar figura · espacio: invertir núcleo · rueda: intensidad
+      ? `<strong>LAB</strong> · ${draw} · 1–4: aislar fuerza · 0: restaurar figura · R: reset (cero partículas) · P: performance · botón derecho: orbitar`
+      : `<strong>PERFORMANCE</strong> · ${draw} · 1–4: fuerzas dentro/fuera · 5: todas · 0: restaurar figura · espacio: invertir radial · rueda: intensidad
          <br>${layerStatusLine()}`;
   }
 
@@ -205,7 +224,9 @@ async function main() {
     drawing = false;
     hasLastStamp = false;
     orbit.enabled = !drawMode && mode === 'LAB';
-    canvas.style.cursor = drawMode ? 'crosshair' : '';
+    // `grab` anuncia que fuera del modo dibujo el botón izquierdo agarra y
+    // arrastra el punto de fuerza. Sin esa pista, el gesto no se descubre.
+    canvas.style.cursor = drawMode ? 'crosshair' : 'grab';
     panel?.setDrawMode(drawMode);
     updateHud();
   };
@@ -230,7 +251,10 @@ async function main() {
     const attracting = params.attractEnabled.value > 0;
     const repelling = params.repelEnabled.value > 0;
     // Mientras dibujas el puntero es pincel, no atractor: ahí siempre se oculta.
-    attractorHelper.visible = !drawMode && (mode === 'LAB' || attracting || repelling);
+    // Y mientras lo arrastras siempre se ve, aunque no haya fuerza radial
+    // encendida: no se puede colocar a ciegas un punto que no se ve.
+    attractorHelper.visible =
+      !drawMode && (mode === 'LAB' || attracting || repelling || guidingAttractor);
 
     // Si las dos están activas manda la que domina a la distancia del propio
     // marcador... que es cero, así que de cerca siempre gana la repulsión.
@@ -304,16 +328,67 @@ async function main() {
   canvas.addEventListener('pointerup', endStroke);
   canvas.addEventListener('pointercancel', endStroke);
 
-  // Fuera del modo dibujo el puntero recupera su función original: conducir
-  // dónde se anclan atracción y repulsión. Este listener va en window (no en el canvas)
-  // porque el atractor debe seguir al puntero también sobre el panel.
-  addEventListener('pointermove', (event) => {
-    if (drawMode) return;
-    if (pointerToWorld(event, hit)) {
-      params.attractor.value.copy(hit);
-      attractorHelper.position.copy(hit);
-    }
+  // CONDUCIR EL PUNTO DE FUERZA -------------------------------------------
+  // Antes el atractor iba pegado al puntero en todo momento, sin pulsar nada, y
+  // eso hacía imposible conducirlo por dos motivos:
+  //
+  //   · No se podía APARCAR. Cualquier movimiento de la mano —ir a pulsar una
+  //     tecla, apartarse de la pantalla— arrastraba el punto de fuerza con él.
+  //   · En LAB, arrastrar para llevarlo giraba además la cámara, porque el
+  //     botón izquierdo era el de órbita. Y como el plano de trabajo se calcula
+  //     con la dirección de la cámara, al girar la vista el punto se recalculaba
+  //     contra una referencia en movimiento: se iba solo mientras lo movías.
+  //
+  // Ahora el atractor es un OBJETO que se agarra y se suelta: se arrastra con el
+  // botón izquierdo y se queda donde lo dejes. La órbita se movió al botón
+  // derecho (ver `orbit.mouseButtons`), así que los dos gestos ya no compiten.
+
+  // El punto solo tiene sentido DENTRO del volumen simulado. El encuadre es más
+  // ancho que el mundo (los bordes de pantalla caían en x ≈ ±7.7 con el mundo
+  // acabado en ±5), así que fuera de la caja las partículas eran atraídas hacia
+  // un punto al otro lado de la pared periódica y el resultado no se leía como
+  // atracción sino como fuga. Acotarlo mantiene el gesto siempre legible.
+  const attractorLimit = params.boundsSize.value * 0.5 - 0.2;
+  const clampToBounds = (v) => {
+    v.x = Math.min(attractorLimit, Math.max(-attractorLimit, v.x));
+    v.y = Math.min(attractorLimit, Math.max(-attractorLimit, v.y));
+    v.z = Math.min(attractorLimit, Math.max(-attractorLimit, v.z));
+    return v;
+  };
+
+  const moveAttractorTo = (event) => {
+    if (!pointerToWorld(event, hit)) return;
+    clampToBounds(hit);
+    params.attractor.value.copy(hit);
+    attractorHelper.position.copy(hit);
+  };
+
+  canvas.addEventListener('pointerdown', (event) => {
+    if (drawMode || event.button !== 0) return;
+    event.preventDefault();
+    // La captura mantiene el gesto vivo aunque el puntero salga del canvas o
+    // pase por encima del panel, igual que en el pincel.
+    canvas.setPointerCapture(event.pointerId);
+    guidingAttractor = true;
+    canvas.style.cursor = 'grabbing';
+    moveAttractorTo(event);
   });
+
+  canvas.addEventListener('pointermove', (event) => {
+    if (!guidingAttractor) return;
+    moveAttractorTo(event);
+  });
+
+  const endGuide = (event) => {
+    if (!guidingAttractor) return;
+    guidingAttractor = false;
+    canvas.style.cursor = drawMode ? 'crosshair' : 'grab';
+    if (event && canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+  };
+  canvas.addEventListener('pointerup', endGuide);
+  canvas.addEventListener('pointercancel', endGuide);
 
   // Identidad de capa: mismo número en LAB (prueba aislada, sobre la figura
   // restaurada) y en PERFORMANCE (encendido/apagado en vivo) para la misma capa.
