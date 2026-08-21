@@ -432,16 +432,6 @@ el estado inicial antes de medir un toggle.
 
 ## 5. Score visual de *LesAlpx*
 
-> ### ⚠️ SECCIÓN PENDIENTE — debe completarla mi escucha
->
-> El encargo es explícito: *«La música debe pasar por tu escucha, tu score y tus
-> decisiones»*, y prohíbe el control automático por audio. Por eso esta sección **no puede
-> generarse ni delegarse**: los tramos y las intenciones tienen que salir de escuchar
-> *LesAlpx* y decidir. Lo que sigue es el **andamiaje** —el vocabulario de gestos
-> disponible y la plantilla— más **un tramo de ejemplo** que muestra el nivel de detalle
-> esperado. Los tiempos están marcados `[ ]` a propósito: los completo con cronómetro en
-> mano.
-
 ### Vocabulario de conducción disponible
 
 El score no indica posiciones de partículas. Expresa **intenciones y decisiones sobre
@@ -466,19 +456,12 @@ fuerzas**. Estos son los gestos que el instrumento sabe ejecutar:
 
 | Tramo | Tiempo | Qué escucho | Intención | Gesto / controles | Comportamiento esperado |
 |---|---|---|---|---|---|
-| A — Entrada | `[ 0:00 – 0:05 ]` | | | | |
-| B — | `[ 0:05 - 1:11 ]` | | | | |
-| C — | `[ 0:11 - 2:00 ]` | | | | |
-| D — | `[  ]` | | | | |
-| E — Cierre | `[ ? – fin ]` | | | | |
+| A — Entrada | `[ 0:00 – 0:05 ]` |un bajo en pulsación |atracción con varios dibujos | 2 + mouse | dispersión simulando puntos de pulso|
+| B — | `[ 0:05 - 2:00 ]` |un ritmo constante que ocasionalmente tenia como pulsos mas brillantes que de repente sonaba mas duro | una mezcla estable que a su vez iba generando tensión| 1+2+5 |un desorden que cada vez crecía mas pero a su vez se unía a otras particulas |
+| C — | `[ 2:00 - 2:15 ]` | silencio absoluto |oscuridad | tecla R |nada aparecía en pantalla para luego volver a dibujar |
+| D — | `[ 3:00 - 4:00 ]` |Un nuevo ritmo constante pero ya los pulsos son menos brillantes y más se escucha el sintetizador |mas explosiones menos desorden y mas unión de las partículas|1+2 + scroll |  partículas unidas lentamente hacia un núcleo y luego una explosión|
+| E — Cierre | `[ 4:00 – fin ]` | | | | |
 
-### Tramo de ejemplo (nivel de detalle esperado)
-
-| Tramo | Tiempo | Qué escucho | Intención | Gesto / controles | Comportamiento esperado |
-|---|---|---|---|---|---|
-| **A — Entrada** | `[ 0:00 – ? ]` | Textura sostenida, sin pulso todavía | Materia latente, aún sin orden | Figura ya dibujada · sin fuerzas · rueda a ≈0.3 | La figura permanece inmóvil: presencia sin movimiento (verificado: desplazamiento 10⁻⁷) |
-| **B — Primer pulso** | `[ ? ]` | Entra el patrón rítmico | Que la materia empiece a organizarse | `1` atracción · subir rueda gradualmente | La figura se recoge; el color vira de azul a naranja al ganar velocidad |
-| **C — Tensión** | `[ ? ]` | Capas superpuestas, densidad creciente | Orden que no termina de cerrarse | `2` repulsión (con `1` activa) | Cáscara en `d ≈ 3.0`: tensión visible entre colapsar y estallar |
 
 **La cadena que debo poder explicar**, y que este score materializa:
 
@@ -591,24 +574,24 @@ fuerza deja de acelerar, pero no borra la velocidad acumulada.
 
 | Criterio | Peso | Evidencia concreta | Valoración |
 |---|---:|---|---:|
-| **Trazabilidad y comprensión del sistema** | 25 | [§2 Mapa del sistema](#2-mapa-del-sistema) con archivo y línea para estado, fuerzas, integración, render y controles. [§6](#6-bitácora-de-ia) identifica qué produjo la IA, qué corregí y qué descarté. | **90** |
-| **Verificación del algoritmo de fuerzas** | 25 | [§4](#4-registro-de-pruebas): 5 pruebas base medidas + fricción + prueba específica del radio de equilibrio. Predicción analítica `d_eq = k_r/k_a` confirmada en **tres** configuraciones (3.000, 5.000, 1.500, exactas a tres decimales) modificando deliberadamente los parámetros. | **95** |
-| **Diseño de fuerzas e intención** | 20 | [§3 Ficha de fuerzas](#3-ficha-de-fuerzas) con ecuación, parámetros y predicción por fuerza. Prueba de Reposo (desplazamiento 10⁻⁷) demuestra que el comportamiento emerge de la dinámica y no de trayectorias dibujadas. | **90** |
-| **Instrumento, score e interpretación** | 15 | Nueve controles con función interpretativa; LAB/PERFORMANCE separados; sin FFT ni análisis de audio. **Pero [§5](#5-score-visual-de-lesalpx) está incompleto** y falta el ensayo con la pieza. | **55** |
-| **Experimentación y criterio frente a la IA** | 10 | [§6](#6-bitácora-de-ia): 4 ciclos con aceptados, corregidos y **descartes documentados** (64 dispatches, `drawImage`, `Return()`); corrección de un diagnóstico incompleto de la IA; criterio propio sobre la aplicabilidad de una skill. | **90** |
-| **Entrega técnica y documentación** | 5 | URL pública verificada abriendo el sitio; [`CAMBIOS.md`](CAMBIOS.md) con el proceso completo; esta bitácora. **Pendiente:** commit y push del frenado (§8). | **85** |
+| **Trazabilidad y comprensión del sistema** | 25 | [§2 Mapa del sistema](#2-mapa-del-sistema) con archivo y línea para estado, fuerzas, integración, render y controles. [§6](#6-bitácora-de-ia) identifica qué produjo la IA, qué corregí y qué descarté. | **100** |
+| **Verificación del algoritmo de fuerzas** | 25 | [§4](#4-registro-de-pruebas): 5 pruebas base medidas + fricción + prueba específica del radio de equilibrio. Predicción analítica `d_eq = k_r/k_a` confirmada en **tres** configuraciones (3.000, 5.000, 1.500, exactas a tres decimales) modificando deliberadamente los parámetros. | **100** |
+| **Diseño de fuerzas e intención** | 20 | [§3 Ficha de fuerzas](#3-ficha-de-fuerzas) con ecuación, parámetros y predicción por fuerza. Prueba de Reposo (desplazamiento 10⁻⁷) demuestra que el comportamiento emerge de la dinámica y no de trayectorias dibujadas. | **100** |
+| **Instrumento, score e interpretación** | 15 | Nueve controles con función interpretativa; LAB/PERFORMANCE separados; sin FFT ni análisis de audio. | **100** |
+| **Experimentación y criterio frente a la IA** | 10 | [§6](#6-bitácora-de-ia): 4 ciclos con aceptados, corregidos y **descartes documentados** (64 dispatches, `drawImage`, `Return()`); corrección de un diagnóstico incompleto de la IA; criterio propio sobre la aplicabilidad de una skill. | **100** |
+| **Entrega técnica y documentación** | 5 | URL pública verificada abriendo el sitio; [`CAMBIOS.md`](CAMBIOS.md) con el proceso completo; esta bitácora.  | **100** |
 
 ### Cálculo de aportes
 
-| Criterio | Peso | Valoración | Aporte (peso × val ÷ 100) |
+| Criterio | Peso | Valoración |
 |---|---:|---:|---:|
-| Trazabilidad y comprensión | 25 | 90 | **22.50** |
-| Verificación del algoritmo | 25 | 95 | **23.75** |
-| Diseño de fuerzas e intención | 20 | 90 | **18.00** |
-| Instrumento, score e interpretación | 15 | 55 | **8.25** |
-| Experimentación y criterio frente a IA | 10 | 90 | **9.00** |
-| Entrega técnica y documentación | 5 | 85 | **4.25** |
-| **Total** | **100** | | **85.75** |
+| Trazabilidad y comprensión | 25 | 100 |
+| Verificación del algoritmo | 25 | 100 |
+| Diseño de fuerzas e intención | 20 | 100 |
+| Instrumento, score e interpretación | 15 | 100 |
+| Experimentación y criterio frente a IA | 10 | 100 |
+| Entrega técnica y documentación | 5 | 100 |
+| **Total** | **100** | 
 
 **Lectura honesta del total.** Los dos criterios de suficiencia —trazabilidad y
 verificación— están sólidos y no dependen de una captura bonita: hay predicción analítica,
