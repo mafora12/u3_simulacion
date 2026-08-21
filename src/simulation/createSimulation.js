@@ -9,6 +9,7 @@ import {
   instancedArray,
   max,
   mix,
+  mod,
   step,
   uint,
   uv,
@@ -123,7 +124,16 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
     const r5 = hash(i.add(uint(71)));
     const r6 = hash(i.add(uint(89)));
 
-    p.assign(vec3(r1, r2, r3).sub(0.5).mul(params.boundsSize.mul(0.45)));
+    // Se reparte por el volumen periódico EXACTO: `(r − 0.5) × 2 × half` cubre
+    // justo [−half, +half].
+    //
+    // El factor tiene que ser 2.0 y no menos. Con 1.8 la nube llenaba solo el
+    // 90 % y quedaba una banda vacía; como todas las partículas caen a la misma
+    // velocidad, la nube se traslada rígida y ese hueco no se rellena nunca:
+    // daba la vuelta al contorno periódico una y otra vez, barriendo la pantalla
+    // como una franja oscura. Un reparto que no llena el volumen periódico
+    // completo es un artefacto permanente, no un detalle inicial.
+    p.assign(vec3(r1, r2, r3).sub(0.5).mul(params.boundsHalf.mul(2.0)));
     v.assign(vec3(r4, r5, r6).sub(0.5).mul(params.initialSpeed));
     aliveBuffer.element(i).assign(float(1.0));
   })().compute(count).setName('Seed Test Cloud');
@@ -155,13 +165,13 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
       // 1) ATRACCIÓN: hacia el atractor, con caída INVERSA A LA DISTANCIA (1/d).
       //
       // No es el inverso del cuadrado, y es una decisión deliberada de escala.
-      // Las partículas viven dentro de `containRadius` (4.5), así que las
-      // distancias de trabajo van de 0.5 a 4.5. Con 1/d² la fuerza a d=3 valía
-      // 0.24 y a d=4.5 apenas 0.11: prácticamente nula fuera de un radio de 2
-      // unidades. El resultado era que el atractor "no se veía" y que la
-      // gravedad (1.2, constante en todo el espacio) la aplastaba por un factor
-      // de 5 a 14. Con 1/d la fuerza mantiene alcance largo —2.0 a d=3, 1.33 a
-      // d=4.5— y el gesto de conducir el atractor se lee en todo el encuadre.
+      // Las partículas ocupan todo el encuadre, así que las distancias de
+      // trabajo llegan a 6 u 8 unidades. Con 1/d² la fuerza a d=3 valía 0.24 y
+      // a d=5 apenas 0.09: prácticamente nula fuera de un radio de 2 unidades.
+      // El resultado era que el atractor "no se veía" y que la gravedad (1.2,
+      // constante en todo el espacio) la aplastaba por un factor de 5 a 14.
+      // Con 1/d la fuerza mantiene alcance largo —2.0 a d=3, 1.2 a d=5— y el
+      // gesto de conducir el atractor se lee en todo el encuadre.
       force.addAssign(
         radialDirection
           .mul(params.attractStrength)
@@ -202,40 +212,6 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
           .mul(params.intensity)
       );
 
-      // CONTENCIÓN SUAVE ---------------------------------------------------
-      // No es una capa expresiva: es la condición de contorno, y por eso no
-      // tiene interruptor ni se escala por `intensity`.
-      //
-      // Antes el contorno era un WRAP PERIÓDICO cúbico: la partícula que salía
-      // por una cara reaparecía en la opuesta. Eso dibujaba literalmente un
-      // cubo en pantalla —se veía a las partículas cortarse en un plano y
-      // reaparecer al otro lado— y ese corte es el «cubo delimitador» que no
-      // queríamos ver.
-      //
-      // Ahora el contorno es un muelle esférico que SOLO actúa fuera de
-      // `containRadius`: dentro la fuerza es exactamente cero y las partículas
-      // se mueven libres; fuera, tira de vuelta al centro con una fuerza
-      // proporcional a lo lejos que se hayan ido. No hay teletransporte, no hay
-      // corte y no hay ninguna cara visible: solo dejan de alejarse y vuelven.
-      //
-      // `max(..., 0)` es lo que hace que sea gratis por dentro, sin ramas.
-      const fromCenter = p.length();
-      const overshoot = max(fromCenter.sub(params.containRadius), 0.0);
-      force.addAssign(
-        p.div(max(fromCenter, 0.0001))     // dirección hacia fuera, normalizada
-          .mul(overshoot)
-          .mul(params.containStrength)
-          .mul(-1.0)                        // ...y se aplica hacia dentro
-      );
-
-      // Amortiguación del contorno. El muelle por sí solo es conservativo:
-      // devuelve toda la energía que absorbe, así que una partícula que llega
-      // lanzada rebota igual de lejos y el borde resuena. Esto disipa esa
-      // energía, y solo fuera del radio: la puerta pasa de 0 a 1 en el primer
-      // cuarto de unidad, de forma continua, para que no haya un escalón.
-      const outsideGate = overshoot.mul(4.0).clamp(0.0, 1.0);
-      force.addAssign(v.mul(params.containDamping).mul(outsideGate).mul(-1.0));
-
       // INTEGRATION -------------------------------------------------------
       // Unit mass: a = F. Semi-implicit Euler: update v, then p.
       v.addAssign(force.mul(dt));
@@ -246,6 +222,17 @@ export function createSimulation({ renderer, scene, params, count = 131072, stam
       });
 
       p.addAssign(v.mul(dt));
+
+      // CONTORNO PERIÓDICO --------------------------------------------------
+      // La que sale por una cara reaparece por la opuesta: con la gravedad
+      // activa, caen y vuelven a entrar por arriba.
+      //
+      // `boundsHalf` es la semiextensión POR EJE, no un cubo, y la calcula
+      // main.js desde el frustum de la cámara. Que sea más grande que el
+      // encuadre es lo que hace que no se vea ningún delimitador: el salto
+      // ocurre fuera de cuadro, así que nunca se ve el corte.
+      const extent = params.boundsHalf.mul(2.0);
+      p.assign(mod(p.add(params.boundsHalf), extent).sub(params.boundsHalf));
     });
   })().compute(count).setName('Update Particles');
 

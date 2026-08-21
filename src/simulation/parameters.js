@@ -11,9 +11,6 @@ export function createParameters() {
     // la figura que trazas se queda quieta hasta que actúa una fuerza.
     initialSpeed: uniform(0.0),
     maxSpeed: uniform(5.0),
-    // Extensión de referencia del mundo. Ya NO define el contorno —de eso se
-    // encarga `containRadius`—; solo fija cuánto se dispersa la nube de prueba.
-    boundsSize: uniform(10.0),
     particleSize: uniform(0.035),
 
     // PINCEL: la figura dibujada es la CONDICIÓN INICIAL del sistema --------
@@ -75,23 +72,21 @@ export function createParameters() {
     dragEnabled: uniform(0.0),
     dragCoefficient: uniform(0.12),
 
-    // CONTENCIÓN (condición de contorno, no una capa expresiva) -------------
-    // Radio a partir del cual un muelle suave empuja de vuelta al centro.
-    // Dentro de él la fuerza es exactamente cero: las partículas se mueven
-    // libres por el espacio, sin ninguna pared ni cara visible. Sustituye al
-    // wrap periódico cúbico, que teletransportaba de una cara a la opuesta y
-    // dibujaba un cubo en pantalla.
-    // El radio está calibrado contra el ENCUADRE, no elegido a ojo: con la
-    // cámara en z=11 y fov 50°, el plano z=0 se ve hasta ±5.13 en vertical. Un
-    // radio de 4.5 deja margen para que ni siquiera el rebote más violento
-    // saque las partículas de cuadro.
-    containRadius: uniform(4.5),
-    containStrength: uniform(28.0),
-    // Amortiguación que solo actúa fuera del radio. Sin ella el muelle es
-    // conservativo: devuelve toda la energía que absorbe, así que una partícula
-    // que llega lanzada rebota igual de lejos y el borde "resuena". Con ella la
-    // energía se disipa y el contorno se comporta como una bolsa blanda.
-    containDamping: uniform(4.0),
+    // CONTORNO PERIÓDICO (semiextensión por eje) ----------------------------
+    // La partícula que sale por una cara reaparece por la opuesta: al activar la
+    // gravedad caen y vuelven a entrar por arriba, que es el comportamiento
+    // buscado.
+    //
+    // La clave para que NO se vea ningún delimitador es que las caras queden
+    // FUERA del encuadre. Antes el volumen era un cubo de ±5 mientras la cámara
+    // mostraba hasta ±9.1 en horizontal: las caras laterales caían dentro de
+    // cuadro y se veía a las partículas cortarse en un plano y reaparecer
+    // enfrente. Eso era el "cubo delimitador".
+    //
+    // Por eso ya no es un cubo ni un valor fijo: `main.js` lo calcula desde el
+    // frustum de la cámara en el arranque y en cada resize, con margen, y deja
+    // la profundidad corta para que nada se meta delante del objetivo.
+    boundsHalf: uniform(new THREE.Vector3(11.0, 6.2, 4.0)),
 
     // 4 · GRAVEDAD (campo constante hacia -Y) --------------------------------
     // No apunta al atractor: es un campo uniforme, igual en todo el espacio.

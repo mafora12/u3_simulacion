@@ -164,7 +164,7 @@ semi-implícito** con masa unitaria (`a = F`):
 v ← v + F·dt          dt = params.dt × timeScale
 v ← clamp(v, maxSpeed)     (limita la velocidad, evita explosiones numéricas)
 p ← p + v·dt
-                           (sin wrap: el contorno es una fuerza, ver abajo)
+p ← wrap(p, ±boundsHalf)   (contorno periódico, por eje)
 ```
 
 Se actualiza **primero la velocidad y después la posición** (semi-implícito, no explícito):
@@ -302,37 +302,40 @@ F_g = (0, −1, 0) · g  ·  gravityEnabled · I
 - **Dirección:** `−Y` constante, **igual en todo el espacio**.
 - **Predicción:** la `y` media baja; el efecto **no cambia** si muevo el atractor. Ese es
   el test que la distingue de la atracción.
-- **Decisión de diseño:** las partículas caen hasta que la contención las frena por abajo.
-  Combinada con fricción alcanzan velocidad terminal, que es la combinación más estable
-  para sostener un tramo largo.
+- **Decisión de diseño:** con el contorno periódico, las partículas caen, salen por abajo
+  y reentran por arriba, en un ciclo continuo. Combinada con fricción alcanzan velocidad
+  terminal, que es la combinación más estable para sostener un tramo largo.
 
-### Contorno · contención suave (sin tecla)
+### Contorno · periódico, sin delimitador visible (sin tecla)
 
 ```
-F_c = − p̂ · k_c · max(‖p‖ − R, 0)   −   v · c_c · gate(‖p‖ > R)
+p ← wrap(p, ±boundsHalf)        por eje, tras integrar
 ```
 
-| Parámetro | Uniform | Defecto |
+| Parámetro | Uniform | Valor |
 |---|---|---|
-| `R` | `containRadius` | `4.5` |
-| `k_c` | `containStrength` | `28.0` |
-| `c_c` | `containDamping` | `4.0` |
+| semiextensión | `boundsHalf` | derivada del frustum: `(10.94, 6.16, 4.0)` a 1280×720 |
 
 No es una capa expresiva —no tiene tecla ni se escala por `intensity`— sino la **condición
-de contorno**. Dentro de `R` la fuerza es exactamente cero y las partículas se mueven
-libres; fuera, un muelle tira de vuelta al centro y una amortiguación disipa la energía.
+de contorno**. La partícula que sale por una cara reaparece por la opuesta: al activar la
+gravedad, la figura cae, sale por abajo y **vuelve a entrar por arriba**.
 
-- **Por qué reemplazó al wrap periódico.** El contorno anterior era cúbico: la partícula
-  que salía por una cara reaparecía en la opuesta. Eso **dibujaba literalmente un cubo en
-  pantalla** —se veía a las partículas cortarse en un plano y reaparecer al otro lado—.
-  Con el muelle no hay teletransporte, no hay corte y no hay ninguna cara visible.
-- **Por qué lleva amortiguación.** Un muelle solo es conservativo: devuelve toda la energía
-  que absorbe, así que una partícula que llega lanzada rebota igual de lejos y el borde
-  resuena. Con `R = 6.5` y sin amortiguar, medido, las partículas alcanzaban **radio 8.87**
-  bajo gravedad fuerte, muy por encima del cuadro visible.
-- **Por qué `R = 4.5`.** Está calibrado contra el encuadre, no elegido a ojo: con la cámara
-  en `z = 11` y fov 50°, el plano `z = 0` se ve hasta **±5.13** en vertical. 4.5 deja margen
-  para que ni el rebote más violento saque las partículas de cuadro.
+- **Por qué antes se veía un «cubo».** Nunca hubo una malla de cubo en la escena. El
+  problema era *dónde caían las caras*: un cubo fijo de ±5 con una cámara que muestra hasta
+  ±9.1 en horizontal deja las caras laterales **dentro** del encuadre, y se ve a las
+  partículas cortarse en un plano y reaparecer enfrente. Seis planos así se leen como un
+  cubo.
+- **La solución no es quitar el wrap, es sacar sus caras de cuadro.** `boundsHalf` se
+  deriva del frustum de la cámara (`distancia · tan(fov/2)`, por el aspecto, con un margen
+  de 1.2) en el arranque y en cada `resize`. Medido a 1280×720: visible ±9.12 × ±5.13
+  frente a un volumen de ±10.94 × ±6.16 — **margen de 1.82 y 1.03**, así que el salto
+  siempre ocurre fuera de la pantalla.
+- **La profundidad se mantiene corta** (`z = ±4`) a propósito: con la cámara en `z = 11`,
+  una cara más lejana pondría partículas casi encima del objetivo.
+- **Se probó una contención esférica y se descartó.** Un muelle blando hacia el centro
+  eliminaba el cubo, pero cambiaba una frontera visible por otra —las partículas se
+  acumulaban en una esfera— y además rompía el comportamiento buscado: dejaban de caer y
+  reaparecer arriba. Ver `CAMBIOS.md`.
 
 ### Macros globales
 

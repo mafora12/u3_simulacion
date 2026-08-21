@@ -68,6 +68,35 @@ const LAYER_MAGNITUDES = Object.freeze({
 
 const isSilent = (value) => value === 0;
 
+// CONTORNO SIN DELIMITADOR VISIBLE ----------------------------------------
+// El contorno es periódico: la partícula que sale por una cara reaparece por la
+// opuesta, así que con la gravedad activa caen y vuelven a entrar por arriba.
+//
+// Que se viera o no un "cubo delimitador" nunca dependió del wrap en sí, sino
+// de DÓNDE caían sus caras. Con un cubo fijo de ±5 y una cámara que muestra
+// hasta ±9.1 en horizontal, las caras laterales quedaban dentro del encuadre y
+// se veía el corte. La solución no es quitar el wrap: es empujar sus caras
+// fuera de cuadro.
+//
+// Por eso el volumen se deriva del frustum de la cámara en vez de fijarse a
+// ojo, y se recalcula al redimensionar (un cambio de aspecto mueve el ancho
+// visible y podría volver a meter las caras laterales en pantalla).
+const BOUNDS_MARGIN = 1.2;   // cuánto más grande que lo visible, por si acaso
+const BOUNDS_HALF_DEPTH = 4; // la profundidad se mantiene corta: con la cámara
+                             // en z=11, una cara más lejana pondría partículas
+                             // casi encima del objetivo.
+
+function fitBoundsToCamera(camera, boundsHalf) {
+  // Semialtura visible en el plano z=0, que es donde vive la figura.
+  const distance = camera.position.length();
+  const halfHeight = distance * Math.tan((camera.fov * Math.PI) / 360);
+  boundsHalf.set(
+    halfHeight * camera.aspect * BOUNDS_MARGIN,
+    halfHeight * BOUNDS_MARGIN,
+    BOUNDS_HALF_DEPTH
+  );
+}
+
 async function main() {
   const mount = document.querySelector('#app');
 
@@ -110,6 +139,10 @@ async function main() {
   canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
   const params = createParameters();
+  // Antes de construir nada: ajustar el volumen periódico al encuadre real, que
+  // depende del aspecto de esta ventana concreta.
+  fitBoundsToCamera(camera, params.boundsHalf.value);
+
   const simulation = createSimulation({
     renderer,
     scene,
@@ -375,16 +408,15 @@ async function main() {
   // botón izquierdo y se queda donde lo dejes. La órbita se movió al botón
   // derecho (ver `orbit.mouseButtons`), así que los dos gestos ya no compiten.
 
-  // El punto solo tiene sentido dentro de la zona donde las partículas pueden
-  // estar. El encuadre es más ancho que esa zona (los bordes de pantalla caen
-  // en x ≈ ±7.7), así que sin acotarlo se podía arrastrar el atractor a un sitio
-  // al que la contención no deja llegar a ninguna partícula: tiraba de ellas
-  // hacia fuera y se quedaban amontonadas contra el borde, sin alcanzarlo nunca.
-  // Se acota al radio de contención, que es exactamente hasta dónde llega el
-  // mundo habitable.
-  const attractorLimit = params.containRadius.value;
+  // El punto se acota al volumen periódico, eje por eje. Fuera de él no hay
+  // partículas que atraer, y como el contorno envuelve, un atractor al otro
+  // lado de una cara tiraría de ellas hacia la salida en vez de hacia el gesto.
+  // Se lee de `boundsHalf` en cada llamada porque un resize lo recalcula.
   const clampToBounds = (v) => {
-    if (v.length() > attractorLimit) v.setLength(attractorLimit);
+    const half = params.boundsHalf.value;
+    v.x = Math.min(half.x, Math.max(-half.x, v.x));
+    v.y = Math.min(half.y, Math.max(-half.y, v.y));
+    v.z = Math.min(half.z, Math.max(-half.z, v.z));
     return v;
   };
 
@@ -716,6 +748,10 @@ async function main() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    // Un cambio de aspecto mueve el ancho visible. Sin reajustar el volumen,
+    // ensanchar la ventana metería las caras laterales dentro del encuadre y
+    // el delimitador volvería a verse.
+    fitBoundsToCamera(camera, params.boundsHalf.value);
   });
 
   resetAll();

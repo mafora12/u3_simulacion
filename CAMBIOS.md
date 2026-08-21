@@ -642,6 +642,91 @@ coincidiendo.
 | Nube sembrada | `partículas 65.536 / 65.536 (100%)` |
 | Tras reset | `partículas 0 / 65.536 (0%)` |
 
+## Vuelta al contorno periódico, ahora sin delimitador visible
+
+**Qué se pidió.** «Estaba bien como antes: que las partículas caigan al activar la gravedad
+y vuelvan a aparecer en la parte superior de la pantalla. Además ahora el delimitador es
+una esfera; déjalo sin delimitador.»
+
+**Qué había fallado en la ronda anterior.** Al quitar el cubo se sustituyó el wrap por una
+contención esférica blanda. Eso resolvía el síntoma —ya no había cubo— pero se llevó por
+delante el comportamiento que se quería conservar (caer y reaparecer arriba) y cambió una
+frontera visible por otra: las partículas se acumulaban formando una esfera. Fue tratar el
+wrap como el culpable cuando el culpable era **otra cosa**.
+
+**El diagnóstico correcto.** Que se viera un delimitador nunca dependió de que el contorno
+fuese periódico, sino de **dónde caían sus caras**. Con un cubo fijo de ±5 y una cámara que
+muestra hasta ±9.12 en horizontal y ±5.13 en vertical, las caras laterales quedaban
+**dentro** del encuadre: se veía a las partículas cortarse en un plano y reaparecer
+enfrente. Seis planos así se leen como un cubo.
+
+La solución no era quitar el wrap. Era **empujar sus caras fuera de cuadro**.
+
+**Corrección.**
+
+- Se restaura el contorno periódico, pero `boundsHalf` es una **semiextensión por eje**, no
+  un cubo, y **se deriva del frustum de la cámara** (`distancia · tan(fov/2)`, escalada por
+  el aspecto, con margen 1.2) en el arranque y en cada `resize`. Un cambio de aspecto mueve
+  el ancho visible, y sin recalcular volvería a meter las caras en pantalla.
+- La profundidad se mantiene corta (`z = ±4`) a propósito: con la cámara en `z = 11`, una
+  cara más lejana pondría partículas casi encima del objetivo.
+- Se elimina la contención esférica y sus tres uniforms, y también `boundsSize`, que ya no
+  definía nada.
+- El punto de fuerza pasa a acotarse al volumen periódico eje por eje. Un atractor al otro
+  lado de una cara tiraría de las partículas hacia la salida en vez de hacia el gesto.
+
+**Verificación de que ninguna cara entra en cuadro** (1280×720):
+
+| | visible (media) | `boundsHalf` | margen |
+|---|---|---|---|
+| X | 9.12 | **10.94** | 1.82 |
+| Y | 5.13 | **6.16** | 1.03 |
+
+**Verificación del wrap**, nube completa con gravedad fuerte, 1200 pasos:
+
+| Comprobación | Resultado |
+|---|---|
+| Saltos abajo→arriba detectados | 151 |
+| Rango de `y` | −6.16 … 6.16 (el volumen completo) |
+| Partículas por encima del borde visible (envolviendo fuera de cuadro) | 5 243 |
+
+**Verificación con figura dibujada** (gravedad 1.2), siguiendo la `y` media:
+
+```
+2.05 → −0.37 → 4.72 ← reaparece arriba → −5.26 → −2.95 → −0.64 → 1.67 → 3.98 → −6.02 → …
+```
+
+Cae, sale por abajo, vuelve a entrar por arriba y sigue ciclando: exactamente el
+comportamiento pedido.
+
+### Un artefacto que solo apareció al medir: la banda vacía
+
+El primer histograma de `y` tras 1200 pasos tenía una cubeta en **exactamente 0** y otra
+baja:
+
+```
+6124 6090 6069 5950   0   4991 6122 6012 6186 6110 6060 5822
+```
+
+Un cero exacto no es física, es un artefacto. La causa: `seedCloud` repartía la nube por el
+**90 %** del volumen periódico (`boundsHalf × 1.8`), dejando una banda sin poblar. Y como
+todas las partículas caen a la misma velocidad —la gravedad es uniforme y `maxSpeed` las
+iguala—, la nube se traslada **rígida**: ese hueco no se rellena nunca, da la vuelta al
+contorno una y otra vez y barre la pantalla como una franja oscura. Otro delimitador
+visible, por otra vía.
+
+Corregido repartiendo por el volumen periódico **exacto** (`× 2.0`). Histograma tras la
+corrección:
+
+| Momento | Desviación máxima respecto al reparto uniforme |
+|---|---|
+| Al sembrar (`y`) | **2.3 %** |
+| Tras 1200 pasos cayendo (`y`) | **4.0 %** |
+| Tras 1200 pasos (`x`) | **2.3 %** |
+
+Sin cubetas vacías. La lección: un reparto que no llena el volumen periódico completo no es
+un detalle del estado inicial, es un artefacto permanente.
+
 ## Controles
 
 | Tecla | Acción |
